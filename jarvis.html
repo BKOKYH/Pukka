@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="JARVIS console: capture actions by voice or typing, keep a conversation log, and track hand-off status to Max and Min.">
+<title>JARVIS</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%2714%27 fill=%27%23050F14%27 stroke=%27%2319C3F0%27 stroke-width=%273%27/%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%276%27 fill=%27%2319C3F0%27/%3E%3C/svg%3E">
+<style>
+:root{--bg:#050F14;--panel:#0A1A22;--text:#CFE8F0;--acc:#19C3F0;--onacc:#031014;--muted:color-mix(in srgb,var(--text) 85%,var(--bg));--line:color-mix(in srgb,var(--acc) 28%,transparent);--chip:color-mix(in srgb,var(--acc) 12%,var(--panel));--warn:#FFD27A;--warnbg:#3A2E10;--err:#FF8A9B;--ok:#4AE0A0;--rec:#FF7A84}
+[data-mode="light"]{--warn:#7A4B00;--warnbg:#FFF1D6;--err:#B00020;--ok:#0B6B3A;--rec:#B3261E}
+[hidden]{display:none!important}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--text);font-family:Aptos,Calibri,"Segoe UI",Arial,sans-serif;font-size:16px;line-height:1.5;min-height:100vh;background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);background-size:44px 44px;background-position:-1px -1px}
+body::before{content:"";position:fixed;inset:0;background:var(--bg);opacity:.9;z-index:-1}
+.wrap{max-width:720px;margin:0 auto;padding:12px 16px 40px}
+.top{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 0 10px}
+.brand{font-weight:700;letter-spacing:.2em;color:var(--acc);font-size:15px}
+.ctl{display:flex;gap:6px}
+h1{font-size:15px;margin:0}
+h2{font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--acc);margin:0 0 8px;font-weight:700}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-top:12px}
+label{display:block;font-size:13px;color:var(--muted);margin-bottom:3px}
+input,select,textarea,button{font:inherit;color:var(--text);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:7px 10px;min-height:40px}
+textarea{width:100%;resize:vertical}
+input[type=color]{padding:2px;width:56px;min-height:40px;cursor:pointer}
+input[type=file]{padding:6px;max-width:100%}
+input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
+button{cursor:pointer}
+button:hover{border-color:var(--acc)}
+button.pri{background:var(--acc);color:var(--onacc);border-color:var(--acc);font-weight:700}
+button.mic{border-color:var(--rec);color:var(--rec)}
+button.mic.on{background:var(--rec);color:var(--bg)}
+button:disabled{opacity:.45;cursor:not-allowed}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-top:10px}
+.grid>div{min-width:0}.grid input,.grid select{width:100%}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px}
+.chk{display:flex;align-items:center;gap:6px;font-size:15px;color:var(--text);margin:0}
+.chk input{min-height:auto;width:18px;height:18px}
+.sub{font-size:13px;color:var(--muted);margin:6px 0 0}
+.err{font-size:14px;color:var(--err);min-height:20px;margin:6px 0 0}
+.chip{display:inline-block;font-size:12px;padding:1px 8px;border-radius:6px;background:var(--chip);color:var(--muted);margin:0 4px 2px 0}
+.chip.f{background:var(--warnbg);color:var(--warn)}
+.chip.s-captured{color:var(--text)}
+.chip.s-handed{background:var(--warnbg);color:var(--warn)}
+.chip.s-registered{color:var(--ok)}
+.item{border-top:1px solid var(--line);padding:10px 0;font-size:15px}
+.item:first-child{border-top:0}
+.item .id{font-weight:700;font-size:13px;color:var(--acc)}
+.item.dim{opacity:.7}
+pre{white-space:pre-wrap;word-break:break-word;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;font-family:Consolas,Menlo,monospace;font-size:12.5px;margin:10px 0 0}
+.hero{display:flex;flex-direction:column;align-items:center;padding:8px 0 0}
+.orbwrap{position:relative;width:130px;height:130px}
+.ring{position:absolute;border-radius:50%;border:2px solid transparent}
+.r1{inset:0;border-top-color:var(--acc);border-right-color:color-mix(in srgb,var(--acc) 40%,transparent);animation:spin 9s linear infinite}
+.r2{inset:12px;border-bottom-color:var(--acc);border-left-color:color-mix(in srgb,var(--acc) 40%,transparent);animation:spin 6s linear infinite reverse}
+.orb{position:absolute;inset:36px;border-radius:50%;background:radial-gradient(circle at 50% 50%,#fff 0 22%,var(--acc) 48%,color-mix(in srgb,var(--acc) 35%,var(--bg)) 100%);box-shadow:0 0 30px color-mix(in srgb,var(--acc) 70%,transparent),0 0 70px color-mix(in srgb,var(--acc) 35%,transparent);animation:pulse 3.2s ease-in-out infinite}
+.orbwrap.listening .orb{animation-duration:.9s}
+.orbwrap.speaking .orb{animation-duration:1.4s}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pulse{0%,100%{transform:scale(.94)}50%{transform:scale(1.04)}}
+@media (prefers-reduced-motion:reduce){.ring,.orb{animation:none!important}}
+.stat{font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:var(--ok);margin-top:6px}
+.bar{display:flex;gap:8px;align-items:center;margin-top:12px}
+.bar input[type=text]{flex:1;min-width:0}
+.nav{display:flex;align-items:center;justify-content:space-between;width:100%;text-align:left;padding:14px;margin-top:12px;font-size:17px;min-height:56px}
+.nav .n{font-weight:700;color:var(--acc)}
+.nav.pri .n{color:var(--onacc)}
+details{margin-top:10px}
+summary{cursor:pointer;color:var(--acc);font-size:14px;min-height:24px}
+.mh{display:flex;align-items:center;justify-content:space-between;gap:6px}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.kpi{display:flex;flex-direction:column;align-items:center;padding:8px 4px;min-height:64px}
+.kpi b{font-size:22px;line-height:1.1;color:var(--acc)}
+.kpi span{font-size:12px;color:var(--muted)}
+.wait{font-size:14px;color:var(--warn);background:var(--warnbg);border-radius:8px;padding:6px 10px;margin:10px 0 0}
+.conv{max-height:46vh;overflow-y:auto;margin-top:8px;padding-right:4px}
+.ln{display:grid;grid-template-columns:46px 1fr;gap:6px;padding:6px 0;border-top:1px solid var(--line);font-size:15px}
+.ln:first-child{border-top:0}
+.ln time{font-size:12px;color:var(--muted);padding-top:2px;font-variant-numeric:tabular-nums}
+.who{font-weight:700;margin-right:4px}
+.ln.j .who{color:var(--acc)}
+.src{font-size:12px;color:var(--muted)}
+.foot{text-align:center;font-size:12px;color:var(--muted);margin-top:28px;line-height:1.6}
+@media (max-width:420px){.bar{flex-wrap:wrap}.bar input[type=text]{flex-basis:100%}.bar button{flex:1}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="top">
+<h1 class="brand">JARVIS</h1>
+<div class="ctl">
+<button id="gear" type="button">Settings</button>
+<button id="theme" type="button" aria-label="Switch between light and dark mode">Light mode</button>
+</div>
+</header>
+
+<main id="s_home">
+<section class="hero">
+<div class="orbwrap" id="orbw" aria-hidden="true"><div class="ring r1"></div><div class="ring r2"></div><div class="orb"></div></div>
+<div class="stat" id="stat" role="status">Standing by</div>
+</section>
+
+<div class="bar">
+<input type="text" id="tx" placeholder="Type an action" aria-label="Action, one line" autocomplete="off">
+<button id="mic" class="mic" type="button">Mic</button>
+<button id="att" type="button" aria-label="Attach files">Attach</button>
+<button id="add" class="pri" type="button">Add</button>
+</div>
+<input id="fl" type="file" multiple hidden>
+<div class="row" style="margin-top:6px">
+<label class="chk"><input type="checkbox" id="lo"> Local-only</label>
+<label class="chk"><input type="checkbox" id="ns"> Not sure</label>
+</div>
+<p class="sub" id="micmsg" role="status"></p>
+<div id="pend" class="sub"></div>
+<p class="err" id="er" role="alert"></p>
+
+<details id="more">
+<summary>More fields</summary>
+<div class="grid">
+<div><label for="ty">Type</label><select id="ty"><option>WORK</option><option>IDEA</option><option>PERSONAL</option></select></div>
+<div><label for="so">Source</label><select id="so"><option>typed</option><option>voice</option></select></div>
+<div><label for="cf">Confidence</label><select id="cf"><option>Low</option><option selected>Medium</option><option>High</option></select></div>
+<div><label for="du">Due date</label><input id="du" type="date"></div>
+<div><label for="wd">Weekday you said</label><select id="wd"><option value="">-</option><option>Mon</option><option>Tue</option><option>Wed</option><option>Thu</option><option>Fri</option><option>Sat</option><option>Sun</option></select></div>
+<div><label for="mo">Money amount</label><input id="mo" inputmode="decimal" placeholder="4000"></div>
+<div><label for="cu">Currency</label><input id="cu" placeholder="SGD"></div>
+</div>
+<div class="grid">
+<div><label for="sess">Session</label><input id="sess" type="number" min="1" value="1"></div>
+<div><label for="dt">Date</label><input id="dt" type="date"></div>
+<div><label for="st">Start</label><input id="st" type="time"></div>
+<div><label for="ts">Time source</label><input id="ts" value="device clock"></div>
+</div>
+</details>
+
+<section class="card" aria-labelledby="h_status">
+<h2 id="h_status">Hand-off status</h2>
+<div class="kpis">
+<button class="kpi" type="button" id="k_captured"><b id="n_captured">0</b><span>Captured</span></button>
+<button class="kpi" type="button" id="k_handed"><b id="n_handed">0</b><span>Handed off</span></button>
+<button class="kpi" type="button" id="k_registered"><b id="n_registered">0</b><span>Registered</span></button>
+<button class="kpi" type="button" id="k_closed"><b id="n_closed">0</b><span>Closed</span></button>
+</div>
+<p class="wait" id="waitln" hidden></p>
+<div class="row"><button id="gpaste" type="button">Update from Max or Min</button></div>
+</section>
+
+<section class="card" aria-labelledby="h_conv">
+<div class="mh"><h2 id="h_conv" style="margin:0">Conversation</h2>
+<div><select id="cs" aria-label="Conversation session" style="min-height:36px;padding:4px 8px"></select></div></div>
+<div class="conv" id="conv" role="log" aria-live="polite" tabindex="0" aria-label="Conversation with JARVIS"></div>
+<div class="row"><button id="ctx" type="button">Save conversation (.txt)</button></div>
+</section>
+
+<button class="nav" id="gl" type="button"><span>Captured log</span><span class="n" id="lcount">0 &rsaquo;</span></button>
+<button class="nav pri" id="gh" type="button"><span>Hand over</span><span class="n" id="hcount">0 to hand over</span></button>
+<p class="sub" id="store" role="status"></p>
+</main>
+
+<main id="s_log" hidden>
+<div class="mh" style="margin-top:6px"><button id="b1" type="button">&lsaquo; Home</button><h2 style="margin:0">Captured log</h2><span></span></div>
+<div class="card">
+<div class="grid">
+<div><label for="fs">Show</label><select id="fs"><option value="all">All</option><option value="captured">Captured</option><option value="handed">Handed off</option><option value="waiting">Waiting over 24 hours</option><option value="registered">Registered</option><option value="closed">Closed</option></select></div>
+<div><label for="fe">Session</label><select id="fe"><option value="">All sessions</option></select></div>
+<div><label for="fq">Search</label><input id="fq" type="text" placeholder="Words or ID"></div>
+</div>
+</div>
+<div class="card" id="logl"></div>
+</main>
+
+<main id="s_hand" hidden>
+<div class="mh" style="margin-top:6px"><button id="b2" type="button">&lsaquo; Home</button><h2 style="margin:0">Hand over</h2><span></span></div>
+<div class="card">
+<h2>1. Build the block</h2>
+<div class="grid"><div><label for="en">End time</label><input id="en" type="time"></div></div>
+<div class="row"><button id="now" type="button">Use device clock</button></div>
+<pre id="out"></pre>
+<div id="hfiles" class="sub"></div>
+<div class="row">
+<button id="cp" type="button">Copy</button>
+<button class="pri" id="mk" type="button">Mark handed off and save CSV</button>
+<button id="rd" type="button">Read aloud</button>
+</div>
+<p class="sub">Paste the block into the Comms Team chat for Max. Marking saves a CSV backup of every item.</p>
+<p class="err" id="er2" role="alert"></p>
+</div>
+<div class="card" id="upd">
+<h2>2. Update from Max or Min</h2>
+<label for="pl">Paste Max's hand-over log or Min's Ops Log lines</label>
+<textarea id="pl" rows="5" placeholder="J-1124-S1-02 registered ..."></textarea>
+<div class="row"><button class="pri" id="pb" type="button">Mark matching IDs registered</button></div>
+<p class="sub">Only Item IDs (J-MMDD-Sn-nn) are read. All other text is ignored and nothing is sent anywhere.</p>
+<p class="sub" id="pr" role="status"></p>
+</div>
+</main>
+
+<main id="s_set" hidden>
+<div class="mh" style="margin-top:6px"><button id="b3" type="button">&lsaquo; Home</button><h2 style="margin:0">Settings</h2><span></span></div>
+<section class="card">
+<h2>Voice read-back (UK)</h2>
+<div class="grid"><div><label for="vc">Voice on this device</label><select id="vc"></select></div></div>
+<div class="row">
+<label class="chk"><input type="checkbox" id="rb" checked> Read each item back after adding</label>
+<button id="tv" type="button">Test voice</button>
+<button id="sp" type="button">Stop</button>
+</div>
+<p class="sub" id="vmsg" role="status"></p>
+<p class="sub">On-device voices keep your words on this device. Online voices send the text to the voice provider. Local-only items are read back with an on-device voice only, or not at all.</p>
+</section>
+<section class="card">
+<h2>Speech input</h2>
+<div class="row"><label class="chk"><input type="checkbox" id="od" checked> Use on-device speech recognition when this browser has it</label></div>
+<div class="row"><button id="odc" type="button">Check on-device speech</button><button id="odi" type="button" hidden>Download on-device speech (UK English)</button></div>
+<p class="sub" id="odmsg" role="status"></p>
+<p class="sub">Without the mic: use the microphone key on your phone keyboard or the dictation shortcut on your Mac.</p>
+</section>
+<section class="card">
+<h2>Backup and archive</h2>
+<p class="sub">Items and the conversation are kept in this browser, which can clear them. Save a CSV regularly. Import skips IDs already here.</p>
+<div class="row">
+<button id="csv" type="button">Export items (CSV)</button>
+<button id="md" type="button">Export items for Obsidian (Markdown)</button>
+<button id="ctx2" type="button">Save all conversations (.txt)</button>
+</div>
+<div class="row"><div><label for="imp">Import items (CSV)</label><input type="file" id="imp" accept=".csv,text/csv"></div></div>
+<div class="row"><button id="cclr" type="button">Clear conversation history</button></div>
+<p class="sub" id="bmsg" role="status"></p>
+</section>
+<section class="card">
+<h2>Colours</h2>
+<p class="sub">Editing the <b id="amode">dark</b> palette. Light and dark each keep their own colours.</p>
+<div class="grid">
+<div><label for="c_acc">Accent</label><input type="color" id="c_acc"></div>
+<div><label for="c_bg">Background</label><input type="color" id="c_bg"></div>
+<div><label for="c_panel">Panels</label><input type="color" id="c_panel"></div>
+<div><label for="c_text">Text</label><input type="color" id="c_text"></div>
+</div>
+<p class="sub" id="cmsg" role="status"></p>
+<div class="row">
+<button id="p_blue" type="button">Default blue</button>
+<button id="p_amber" type="button">Amber</button>
+<button id="p_green" type="button">Green</button>
+<button id="p_pukka" type="button">Pukka light</button>
+<button id="p_reset" type="button">Reset this mode</button>
+</div>
+<div class="row">
+<button id="c_exp" type="button">Export colours (JSON)</button>
+<div><label for="c_imp">Import colours</label><input type="file" id="c_imp" accept=".json,application/json"></div>
+</div>
+</section>
+</main>
+
+<footer class="foot">Pukka Solutions | Business Excellence | Agent Maestro | APAC Advisory<br>Let us learn, connect and craft value together.</footer>
+</div>
+<script>
+(function(){
+var $=function(i){return document.getElementById(i)};
+function two(n){return (n<10?'0':'')+n}
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+function ymd(d){return d.getFullYear()+'-'+two(d.getMonth()+1)+'-'+two(d.getDate())}
+function hm(d){return two(d.getHours())+':'+two(d.getMinutes())}
+var storeOk=true;
+function ls(k,v){try{if(v===undefined)return localStorage.getItem(k);localStorage.setItem(k,v);return v}catch(e){if(v!==undefined)storeOk=false;return null}}
+function dl(text,type,name){var b=new Blob([text],{type:type+';charset=utf-8'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;document.body.appendChild(a);a.click();document.body.removeChild(a)}
+
+var ST={captured:'Captured',handed:'Handed off',registered:'Registered',closed:'Closed'};
+var DAY=86400000;
+var items=[],conv=[],pending=[],synth=window.speechSynthesis||null,voices=[];
+var T0=new Date();
+$('dt').value=ymd(T0);$('st').value=hm(T0);
+
+function setSt(it,s){it.st=s;it.stt=it.stt||{};it.stt[s]=new Date().toISOString()}
+function waiting(it){return it.st==='handed'&&it.stt&&it.stt.handed&&(Date.now()-Date.parse(it.stt.handed))>DAY}
+function norm(it){it.files=it.files||[];it.fl=it.fl||[];if(!it.st)it.st=it.done?'handed':'captured';delete it.done;it.stt=it.stt||{};if(!it.stt.captured&&it.at)it.stt.captured=it.at;return it}
+
+function save(){ls('jarvis-items',JSON.stringify({v:2,items:items,sess:$('sess').value,dt:$('dt').value,st:$('st').value}));drawStore()}
+function saveConv(){ls('jarvis-conv',JSON.stringify(conv))}
+function drawStore(){$('store').textContent=storeOk?'Saved in this browser. Export a CSV regularly (Settings, Backup).':'This browser blocked saving. Items will be lost when the page closes. Export a CSV from Settings, Backup.'}
+(function load(){
+var raw=ls('jarvis-items');
+if(raw){try{var o=JSON.parse(raw);if(o&&o.items)items=o.items.map(norm);
+if(o&&o.dt===$('dt').value){if(o.sess)$('sess').value=o.sess;if(o.st)$('st').value=o.st}}catch(e){}}
+try{var c=JSON.parse(ls('jarvis-conv')||'[]');if(Array.isArray(c))conv=c}catch(e){}
+})();
+drawStore();
+
+/* ---------- colours ---------- */
+var PRE={
+blue:{mode:'dark',c:{acc:'#19C3F0',bg:'#050F14',panel:'#0A1A22',text:'#CFE8F0'}},
+amber:{mode:'dark',c:{acc:'#FFB02E',bg:'#120D04',panel:'#1E1608',text:'#F3E6CF'}},
+green:{mode:'dark',c:{acc:'#3DDC97',bg:'#04110C',panel:'#0A1E15',text:'#D3EFE2'}},
+pukka:{mode:'light',c:{acc:'#0047AB',bg:'#FAF8F5',panel:'#FFFFFF',text:'#404040'}}};
+var DEF={dark:PRE.blue.c,light:PRE.pukka.c};
+var mode=ls('jarvis-mode')||((window.matchMedia&&window.matchMedia('(prefers-color-scheme: light)').matches)?'light':'dark');
+var cols={dark:JSON.parse(JSON.stringify(DEF.dark)),light:JSON.parse(JSON.stringify(DEF.light))};
+try{var sv=JSON.parse(ls('jarvis-colours')||'null');if(sv){['dark','light'].forEach(function(m){if(sv[m])for(var k in cols[m])if(/^#[0-9a-f]{6}$/i.test(sv[m][k]||''))cols[m][k]=sv[m][k]})}}catch(e){}
+function lum(h){var r=parseInt(h.slice(1,3),16)/255,g=parseInt(h.slice(3,5),16)/255,b=parseInt(h.slice(5,7),16)/255;function f(c){return c<=0.03928?c/12.92:Math.pow((c+0.055)/1.055,2.4)}return 0.2126*f(r)+0.7152*f(g)+0.0722*f(b)}
+function ratio(a,b){var x=lum(a),y=lum(b);return (Math.max(x,y)+0.05)/(Math.min(x,y)+0.05)}
+function applyColours(){
+var c=cols[mode],r=document.documentElement;
+r.setAttribute('data-mode',mode);r.style.colorScheme=mode;
+r.style.setProperty('--acc',c.acc);r.style.setProperty('--bg',c.bg);r.style.setProperty('--panel',c.panel);r.style.setProperty('--text',c.text);
+r.style.setProperty('--onacc',ratio('#000000',c.acc)>=ratio('#FFFFFF',c.acc)?'#000000':'#FFFFFF');
+$('theme').textContent=mode==='dark'?'Light mode':'Dark mode';$('amode').textContent=mode;
+$('c_acc').value=c.acc;$('c_bg').value=c.bg;$('c_panel').value=c.panel;$('c_text').value=c.text;
+var rt=ratio(c.text,c.bg),ra=ratio(c.acc,c.bg),m=[];
+if(rt<4.5)m.push('Text on background is '+rt.toFixed(1)+':1, below the 4.5:1 reading standard.');
+if(ra<3)m.push('Accent on background is '+ra.toFixed(1)+':1, low for buttons and labels.');
+$('cmsg').textContent=m.length?m.join(' '):'Contrast looks fine ('+rt.toFixed(1)+':1 text, '+ra.toFixed(1)+':1 accent).'}
+function saveColours(){ls('jarvis-colours',JSON.stringify(cols))}
+$('theme').onclick=function(){mode=mode==='dark'?'light':'dark';ls('jarvis-mode',mode);applyColours()};
+['acc','bg','panel','text'].forEach(function(k){$('c_'+k).oninput=function(){cols[mode][k]=this.value;applyColours();saveColours()}});
+function preset(n){return function(){mode=PRE[n].mode;ls('jarvis-mode',mode);cols[mode]=JSON.parse(JSON.stringify(PRE[n].c));applyColours();saveColours()}}
+$('p_blue').onclick=preset('blue');$('p_amber').onclick=preset('amber');$('p_green').onclick=preset('green');$('p_pukka').onclick=preset('pukka');
+$('p_reset').onclick=function(){cols[mode]=JSON.parse(JSON.stringify(DEF[mode]));applyColours();saveColours()};
+$('c_exp').onclick=function(){dl(JSON.stringify(cols,null,2),'application/json','jarvis-colours.json')};
+$('c_imp').onchange=function(){var f=this.files[0];if(!f)return;var r=new FileReader();r.onload=function(){try{var o=JSON.parse(r.result),ok=false;['dark','light'].forEach(function(m){if(o[m])for(var k in cols[m])if(/^#[0-9a-f]{6}$/i.test(o[m][k]||'')){cols[m][k]=o[m][k];ok=true}});if(!ok)throw 0;applyColours();saveColours()}catch(e){$('cmsg').textContent='That file is not a valid colour export.'}};r.readAsText(f)};
+applyColours();
+
+/* ---------- routing ---------- */
+var SCR=['home','log','hand','set'];
+function curScreen(){var h=(location.hash||'').replace('#','');return SCR.indexOf(h)<0?'home':h}
+function route(){var h=curScreen();SCR.forEach(function(s){$('s_'+s).hidden=(s!==h)});if(h==='log')renderLog();if(h==='hand')buildHand();if(h==='home')renderHome();window.scrollTo(0,0)}
+window.addEventListener('hashchange',route);
+function go(h){if(curScreen()===h){route();return}location.hash=h==='home'?'':h}
+$('gl').onclick=function(){$('fs').value='all';go('log')};$('gh').onclick=function(){go('hand')};$('gear').onclick=function(){go('set')};
+$('b1').onclick=$('b2').onclick=$('b3').onclick=function(){go('home')};
+$('gpaste').onclick=function(){go('hand');setTimeout(function(){$('upd').scrollIntoView();$('pl').focus()},50)};
+Object.keys(ST).forEach(function(s){$('k_'+s).onclick=function(){$('fs').value=s;go('log')}});
+
+/* ---------- sessions and IDs ---------- */
+function sdate(){return new Date(($('dt').value||ymd(new Date()))+'T00:00:00')}
+function sessKey(){var d=sdate();return two(d.getMonth()+1)+two(d.getDate())+' S'+($('sess').value||1)}
+function nextId(){var d=sdate(),pre='J-'+two(d.getMonth()+1)+two(d.getDate())+'-S'+($('sess').value||1)+'-',mx=0;items.forEach(function(it){if(it.id.indexOf(pre)===0){var n=parseInt(it.id.slice(pre.length),10);if(n>mx)mx=n}});return pre+two(mx+1)}
+function sessOf(it){var m=/^J-(\d{4})-S(\d+)-/.exec(it.id);return m?m[1]+' S'+m[2]:'other'}
+function byId(id){for(var i=0;i<items.length;i++)if(items[i].id===id)return items[i];return null}
+function kb(n){return n<0?'':(n>=1048576?(n/1048576).toFixed(1)+' MB':Math.max(1,Math.round(n/1024))+' KB')}
+function fn1(f){return f.size<0?f.name:f.name+' ('+kb(f.size)+')'}
+function fnames(it){return it.files.map(fn1).join(', ')}
+function flags(it){var a=it.fl.slice();if(it.files.length)a.push('ATTACH '+fnames(it));return a.join('; ')||'-'}
+function line(it){return [it.id,it.ty,it.tx,it.so,it.cf,it.lo,flags(it)].join(' | ')}
+function count(s){return items.filter(function(it){return it.st===s}).length}
+function toHand(){return items.filter(function(it){return it.st==='captured'})}
+
+/* ---------- conversation ---------- */
+function log(who,tx,o){o=o||{};conv.push({t:new Date().toISOString(),w:who,tx:tx,id:o.id||'',src:o.src||'',k:sessKey()});saveConv();renderConv(true)}
+function convKeys(){var seen={},a=[];conv.forEach(function(c){if(!seen[c.k]){seen[c.k]=1;a.push(c.k)}});var k=sessKey();if(!seen[k])a.push(k);return a}
+function fillConvSess(keep){var cur=keep||$('cs').value||sessKey(),ks=convKeys();$('cs').innerHTML=ks.map(function(k){return '<option value="'+esc(k)+'">Session '+esc(k)+'</option>'}).join('');$('cs').value=ks.indexOf(cur)>=0?cur:sessKey()}
+function chipSt(it){return '<span class="chip s-'+it.st+'">'+esc(it.id)+' · '+ST[it.st]+(waiting(it)?' · waiting':'')+'</span>'}
+function renderConv(toNow){
+fillConvSess(toNow?sessKey():null);
+var k=$('cs').value,list=conv.filter(function(c){return c.k===k}),box=$('conv');
+if(!list.length){box.innerHTML='<p class="sub">Nothing said in this session yet. Speak or type an action above.</p>';return}
+box.innerHTML=list.map(function(c){var d=new Date(c.t),it=c.id?byId(c.id):null;
+return '<div class="ln'+(c.w==='j'?' j':'')+'"><time datetime="'+esc(c.t)+'">'+hm(d)+'</time><div><span class="who">'+(c.w==='j'?'JARVIS':'You')+'</span>'+(c.src?'<span class="src">('+esc(c.src)+')</span> ':'')+esc(c.tx)+(it?'<br>'+chipSt(it):'')+'</div></div>'}).join('');
+box.scrollTop=box.scrollHeight}
+$('cs').onchange=function(){renderConv(false)};
+function convText(keys){
+var out=[];keys.forEach(function(k){var l=conv.filter(function(c){return c.k===k});if(!l.length)return;
+var a=new Date(l[0].t),b=new Date(l[l.length-1].t);
+out.push('JARVIS CONVERSATION | Session '+k+' | '+ymd(a)+' '+hm(a)+'–'+hm(b)+' (device clock)');
+l.forEach(function(c){var d=new Date(c.t),it=c.id?byId(c.id):null;out.push('['+ymd(d)+' '+hm(d)+'] '+(c.w==='j'?'JARVIS':'You')+(c.src?' ('+c.src+')':'')+': '+c.tx+(it?' ['+it.id+' · '+ST[it.st]+']':''))});out.push('')});
+return out.join('\n')}
+$('ctx').onclick=function(){var k=$('cs').value;if(!conv.some(function(c){return c.k===k}))return;dl(convText([k]),'text/plain','jarvis-conversation-'+k.replace(' ','-')+'-'+ymd(new Date())+'.txt')};
+$('ctx2').onclick=function(){if(!conv.length){$('bmsg').textContent='No conversation to save yet.';return}dl(convText(convKeys()),'text/plain','jarvis-conversations-'+ymd(new Date())+'.txt');$('bmsg').textContent='Conversation saved to your downloads.'};
+$('cclr').onclick=function(){if(this.getAttribute('data-arm')!=='1'){this.setAttribute('data-arm','1');this.textContent='Tap again to clear (save it first)';return}this.removeAttribute('data-arm');this.textContent='Clear conversation history';conv=[];saveConv();renderConv(true);$('bmsg').textContent='Conversation history cleared. Items are kept.'};
+
+/* ---------- home ---------- */
+function renderHome(){
+$('lcount').innerHTML=items.length+' &rsaquo;';$('hcount').textContent=toHand().length+' to hand over';
+Object.keys(ST).forEach(function(s){$('n_'+s).textContent=count(s)});
+var w=items.filter(waiting);$('waitln').hidden=!w.length;
+$('waitln').textContent=w.length?w.length+' handed off over 24 hours ago, not yet registered: '+w.map(function(it){return it.id}).join(', ')+'. Check with Max.':'';
+renderConv(false)}
+
+$('att').onclick=function(){$('fl').click()};
+$('fl').onchange=function(){for(var i=0;i<this.files.length;i++)pending.push({name:this.files[i].name,size:this.files[i].size});this.value='';drawPend()};
+function drawPend(){$('pend').innerHTML=pending.length?'Attached: '+pending.map(function(f,i){return esc(f.name)+' ('+kb(f.size)+') <a href="#" data-p="'+i+'">remove</a>'}).join(', ')+'. The files stay on this device; the hand-off lists their names.':'';
+var as=$('pend').querySelectorAll('a[data-p]');for(var k=0;k<as.length;k++)as[k].onclick=function(e){e.preventDefault();pending.splice(+this.getAttribute('data-p'),1);drawPend()}}
+
+$('ns').onchange=function(){if($('ns').checked)$('cf').value='Low'};
+$('lo').onchange=function(){stopMic();syncMic()};
+$('tx').addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();$('add').click()}});
+
+var micMode='';
+$('add').onclick=function(){
+var er=$('er');er.textContent='';
+var t=$('tx').value.trim();
+if(!t){er.textContent='Enter the action first.';return}
+if(!$('dt').value){er.textContent='Set the session date under More fields.';return}
+if(/password|passcode|\bpin\b|\b\d{9,}\b/i.test(t)){er.textContent='This looks like a password, PIN or account number. It is not recorded. Remove it and add the item again.';log('j','Not recorded: that looked like a password, PIN or account number. Please rephrase without it.');return}
+var fl=[],d=$('du').value;
+if($('ns').checked)fl.push('NOT SURE');
+if(d){var dd=new Date(d+'T00:00:00'),wk=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dd.getDay()];fl.push('DUE '+d+' ('+wk+')');if($('wd').value&&$('wd').value!==wk){fl.push('NOT SURE: you said '+$('wd').value+', but '+d+' is a '+wk);$('cf').value='Low'}}
+var m=$('mo').value.trim(),c=$('cu').value.trim().toUpperCase();
+if(m){fl.push('MONEY '+m+' '+(c||'?'));if(!c){fl.push('NOT SURE: currency');$('cf').value='Low'}}
+var it=norm({id:nextId(),ty:$('ty').value,tx:t,so:$('so').value,cf:$('cf').value,lo:$('lo').checked?'Y':'N',fl:fl,due:d,files:pending.slice(),at:new Date().toISOString()});
+setSt(it,'captured');items.push(it);save();
+var src=it.so+(it.so==='voice'&&micMode?', '+micMode:'')+(it.lo==='Y'?', Local-only':'');
+log('u',t,{src:src});
+var ns=fl.some(function(f){return f.indexOf('NOT SURE')===0});
+var reply='Item '+it.id.slice(-2)+'. '+it.ty.toLowerCase()+'. '+it.tx+'. Confidence '+it.cf.toLowerCase()+'.'+(d?' Due '+fl.filter(function(f){return f.indexOf('DUE ')===0})[0].slice(4)+'.':'')+(ns?' Flagged not sure.':'');
+log('j',reply,{id:it.id});
+if($('rb').checked){if(!say(reply,it.lo==='Y')&&synth)log('j','Read-back skipped: this is a Local-only item and no on-device voice was found.')}
+$('tx').value='';['du','mo','cu'].forEach(function(i){$(i).value=''});$('wd').value='';$('ns').checked=false;$('lo').checked=false;$('cf').value='Medium';$('so').value='typed';micMode='';pending=[];drawPend();syncMic();
+renderHome();$('tx').focus()};
+['sess','dt','st'].forEach(function(i){$(i).onchange=function(){save();renderConv(true)}});
+
+/* ---------- captured log ---------- */
+function fillSess(){var cur=$('fe').value,seen={},o='<option value="">All sessions</option>';items.forEach(function(it){var s=sessOf(it);if(!seen[s]){seen[s]=1;o+='<option value="'+esc(s)+'">'+esc(s)+'</option>'}});$('fe').innerHTML=o;if(seen[cur])$('fe').value=cur}
+function renderLog(){
+fillSess();
+var st=$('fs').value,se=$('fe').value,q=$('fq').value.trim().toLowerCase();
+var list=items.filter(function(it){if(st==='waiting'){if(!waiting(it))return false}else if(st!=='all'&&it.st!==st)return false;if(se&&sessOf(it)!==se)return false;if(q&&(it.id+' '+it.tx+' '+it.fl.join(' ')).toLowerCase().indexOf(q)<0)return false;return true}).reverse();
+if(!list.length){$('logl').innerHTML='<span class="sub">'+(items.length?'No items match this filter.':'No items yet.')+'</span>';return}
+$('logl').innerHTML=list.map(function(it){var i=items.indexOf(it),when=it.stt[it.st]?new Date(it.stt[it.st]):null;
+return '<div class="item'+(it.st==='registered'||it.st==='closed'?' dim':'')+'"><span class="id">'+esc(it.id)+'</span> '+chipSt(it)+'<span class="chip">'+it.ty+'</span><span class="chip">'+it.so+'</span><span class="chip">Confidence '+it.cf+'</span><span class="chip">Local-only '+it.lo+'</span><div>'+esc(it.tx)+'</div>'+it.fl.map(function(f){return '<span class="chip f">'+esc(f)+'</span>'}).join('')+(it.files.length?'<span class="chip">Files: '+esc(fnames(it))+'</span>':'')+(when?'<div class="sub">'+ST[it.st]+' '+ymd(when)+' '+hm(when)+'</div>':'')+
+'<div class="row" style="margin-top:6px"><select data-s="'+i+'" aria-label="Status of '+esc(it.id)+'">'+Object.keys(ST).map(function(s){return '<option value="'+s+'"'+(s===it.st?' selected':'')+'>'+ST[s]+'</option>'}).join('')+'</select><button type="button" data-r="'+i+'">Remove</button></div></div>'}).join('');
+var ss=$('logl').querySelectorAll('select[data-s]');for(var k=0;k<ss.length;k++)ss[k].onchange=function(){var x=items[+this.getAttribute('data-s')];setSt(x,this.value);save();log('j',x.id+' marked '+ST[x.st].toLowerCase()+' by you.',{id:x.id});renderLog()};
+var rs=$('logl').querySelectorAll('button[data-r]');for(var j=0;j<rs.length;j++)rs[j].onclick=function(){if(this.getAttribute('data-arm')!=='1'){this.setAttribute('data-arm','1');this.textContent='Tap again to remove';return}var x=items.splice(+this.getAttribute('data-r'),1)[0];save();log('j',x.id+' removed by you.');renderLog()}}
+$('fs').onchange=$('fe').onchange=renderLog;$('fq').oninput=renderLog;
+
+/* ---------- hand over ---------- */
+function buildHand(){
+var o=toHand();$('er2').textContent='';
+if(!o.length){$('out').textContent='Nothing captured to hand over.';$('hfiles').textContent='';return}
+if(!$('en').value){$('out').textContent=o.length+' to hand over. Enter the end time, or use the device clock, to build the block.';$('hfiles').textContent='';return}
+$('out').textContent='JARVIS HANDOFF | Session '+$('dt').value+', '+$('st').value+'–'+$('en').value+' ('+($('ts').value||'time source not stated')+')\n'+o.map(line).join('\n');
+var fs=[];o.forEach(function(it){it.files.forEach(function(f){fs.push(it.id+': '+fn1(f))})});
+$('hfiles').textContent=fs.length?'Attach these yourself in the chat: '+fs.join('; '):''}
+$('en').onchange=buildHand;
+$('now').onclick=function(){$('en').value=hm(new Date());buildHand()};
+$('cp').onclick=function(){var e=$('er2');e.textContent='';if(!$('en').value||!toHand().length){e.textContent='Build the block first.';return}var t=$('out').textContent;if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(function(){e.textContent='Copied.'},function(){e.textContent='Copy blocked. Select the text and copy it by hand.'})}else{e.textContent='Copy not available here. Select the text and copy it by hand.'}};
+$('mk').onclick=function(){var e=$('er2');e.textContent='';var o=toHand();
+if(!o.length){e.textContent='Nothing to hand over.';return}
+if(!$('en').value){e.textContent='Enter the end time first.';return}
+o.forEach(function(it){setSt(it,'handed')});save();exportCsv();
+log('j','Handed off '+o.length+' item'+(o.length===1?'':'s')+' to Max: '+o.map(function(it){return it.id}).join(', ')+'. Waiting for Min to register them.');
+buildHand();renderHome();e.textContent='Marked handed off. CSV saved to your downloads.'};
+$('rd').onclick=function(){var e=$('er2');e.textContent='';var o=toHand();if(!o.length){e.textContent='Nothing to read.';return}
+var lo=o.some(function(it){return it.lo==='Y'});
+if(!say(o.map(function(it){return 'Item '+it.id.slice(-2)+'. '+it.ty.toLowerCase()+'. '+it.tx+'. Confidence '+it.cf.toLowerCase()+'.'}).join(' '),lo))e.textContent=synth?'Not read: the block has Local-only items and no on-device voice was found.':'This browser cannot speak.'};
+$('pb').onclick=function(){
+var txt=$('pl').value,ids=txt.match(/J-\d{4}-S\d+-\d{2,}/g)||[],seen={},reg=[],had=[],unk=[];
+ids.forEach(function(id){if(seen[id])return;seen[id]=1;var it=byId(id);if(!it)unk.push(id);else if(it.st==='registered'||it.st==='closed')had.push(id);else{setSt(it,'registered');reg.push(id)}});
+if(!ids.length){$('pr').textContent='No Item IDs found in that text.';return}
+save();$('pl').value='';
+var msg=(reg.length?'Registered '+reg.length+': '+reg.join(', ')+'. ':'')+(had.length?'Already registered or closed: '+had.join(', ')+'. ':'')+(unk.length?'Not in this log, please check: '+unk.join(', ')+'.':'');
+$('pr').textContent=msg;log('j','Update from Max or Min. '+msg.trim());renderHome()};
+
+/* ---------- CSV, Markdown ---------- */
+function q(v){v=String(v);return '"'+v.replace(/"/g,'""')+'"'}
+function exportCsv(){
+var safe=function(t){return /^[=+\-@]/.test(t)?"'"+t:t};
+var r=['id,type,text,source,confidence,local_only,flags,files,handed_off,due,status,status_time'].concat(items.map(function(it){return [it.id,it.ty,safe(it.tx),it.so,it.cf,it.lo,it.fl.join('; '),fnames(it),it.st==='captured'?'N':'Y',it.due||'',it.st,it.stt[it.st]||''].map(q).join(',')}));
+dl(r.join('\n'),'text/csv','jarvis-items-'+ymd(new Date())+'.csv')}
+$('csv').onclick=function(){if(!items.length){$('bmsg').textContent='Nothing to export yet.';return}exportCsv();$('bmsg').textContent='CSV saved to your downloads.'};
+$('md').onclick=function(){if(!items.length){$('bmsg').textContent='Nothing to export yet.';return}
+var n=new Date(),md=['# JARVIS items','Exported '+ymd(n)+' '+hm(n)+' (device clock)',''].concat(items.map(function(it){return '- ['+(it.st==='registered'||it.st==='closed'?'x':' ')+'] **'+it.id+'** '+it.ty+' — '+it.tx.replace(/\n/g,' ')+' · Status: '+ST[it.st]+(it.fl.length?' · '+it.fl.join('; '):'')+(it.lo==='Y'?' · Local-only':'')}));
+dl(md.join('\n')+'\n','text/markdown','jarvis-items-'+ymd(n)+'.md');$('bmsg').textContent='Markdown saved. Copy it into your Obsidian vault by hand.'};
+function parseCSV(s){var rows=[],row=[],f='',inq=false,i,c;for(i=0;i<s.length;i++){c=s.charAt(i);if(inq){if(c==='"'){if(s.charAt(i+1)==='"'){f+='"';i++}else inq=false}else f+=c}else{if(c==='"')inq=true;else if(c===','){row.push(f);f=''}else if(c==='\n'||c==='\r'){if(c==='\r'&&s.charAt(i+1)==='\n')i++;row.push(f);rows.push(row);row=[];f=''}else f+=c}}if(f!==''||row.length){row.push(f);rows.push(row)}return rows}
+$('imp').onchange=function(){var f=this.files[0],self=this;if(!f)return;var r=new FileReader();r.onload=function(){
+try{var rows=parseCSV(String(r.result).replace(/^﻿/,'')),h=rows[0].map(function(x){return x.trim().toLowerCase()});
+var ix=function(n){return h.indexOf(n)},col=function(c,n){return ix(n)>=0?(c[ix(n)]||''):''};
+if(ix('id')<0||ix('text')<0)throw 0;
+var add=0,skip=0;
+rows.slice(1).forEach(function(c){var id=col(c,'id').trim();if(!id)return;if(byId(id)){skip++;return}
+var tx=col(c,'text');if(/^'[=+\-@]/.test(tx))tx=tx.slice(1);
+var fl=col(c,'flags').split('; ').filter(function(x){return x&&x!=='-'});
+var due=col(c,'due');if(!due){fl.forEach(function(x){var m=/^DUE (\d{4}-\d{2}-\d{2})/.exec(x);if(m)due=m[1]})}
+var ft=col(c,'files'),st=col(c,'status');if(!ST[st])st=col(c,'handed_off')==='Y'?'handed':'captured';
+var it={id:id,ty:col(c,'type')||'WORK',tx:tx,so:col(c,'source')||'typed',cf:col(c,'confidence')||'Medium',lo:col(c,'local_only')||'N',fl:fl,due:due,files:ft?[{name:ft,size:-1}]:[],st:st,stt:{},at:''};
+if(col(c,'status_time'))it.stt[st]=col(c,'status_time');
+items.push(norm(it));add++});
+save();renderHome();$('bmsg').textContent='Imported '+add+' item'+(add===1?'':'s')+', skipped '+skip+' already here.'}
+catch(e){$('bmsg').textContent='That file is not a JARVIS items CSV.'}self.value=''};r.readAsText(f)};
+
+/* ---------- voice out ---------- */
+function setOrb(s){$('orbw').className='orbwrap'+(s?' '+s:'');$('stat').textContent=s==='listening'?'Listening':s==='speaking'?'Speaking':'Standing by'}
+function loadVoices(){
+if(!synth){$('vmsg').textContent='This browser cannot speak. Read-back is off.';$('vc').innerHTML='';return}
+var all=synth.getVoices(),pref=ls('jarvis-voice');
+voices=all.filter(function(v){return /^en[-_]GB/i.test(v.lang)});
+var uk=voices.length;if(!uk)voices=all.filter(function(v){return /^en/i.test(v.lang)});
+voices.sort(function(a,b){return (b.localService?1:0)-(a.localService?1:0)});
+$('vc').innerHTML=voices.map(function(v,i){return '<option value="'+i+'">'+esc(v.name)+' — '+(v.localService?'on-device':'online')+'</option>'}).join('');
+var ix=-1;voices.forEach(function(v,i){if(v.name===pref)ix=i});if(ix<0)ix=0;if(voices.length)$('vc').value=String(ix);
+var nl=voices.filter(function(v){return v.localService}).length;
+$('vmsg').textContent=!voices.length?'No English voice found yet. Add one in your device settings, then reload.':(!uk?'No UK English voice found; showing other English voices. ':'')+nl+' on-device and '+(voices.length-nl)+' online voice'+(voices.length-nl===1?'':'s')+' found.'}
+if(synth){loadVoices();if(synth.addEventListener)synth.addEventListener('voiceschanged',loadVoices);else synth.onvoiceschanged=loadVoices}else loadVoices();
+function pickVoice(localOnly){var v=voices[+$('vc').value]||null;if(!localOnly)return v;if(v&&v.localService)return v;for(var i=0;i<voices.length;i++)if(voices[i].localService)return voices[i];return false}
+function say(t,localOnly){if(!synth)return false;var v=pickVoice(localOnly);if(v===false)return false;synth.cancel();var u=new SpeechSynthesisUtterance(t);if(v){u.voice=v;u.lang=v.lang}else u.lang='en-GB';u.onstart=function(){setOrb('speaking')};u.onend=u.onerror=function(){setOrb('')};synth.speak(u);return true}
+$('vc').onchange=function(){var v=voices[+$('vc').value];if(v)ls('jarvis-voice',v.name)};
+$('tv').onclick=function(){var h=new Date().getHours();say('Good '+(h<12?'morning':h<18?'afternoon':'evening')+'. JARVIS is ready.')};
+$('sp').onclick=function(){if(synth)synth.cancel();setOrb('')};
+
+/* ---------- voice in ---------- */
+var rec=null,SR=window.SpeechRecognition||window.webkitSpeechRecognition,od='unchecked';
+$('od').checked=ls('jarvis-od')!=='0';
+$('od').onchange=function(){ls('jarvis-od',this.checked?'1':'0');syncMic()};
+function useLocal(){return $('od').checked&&od==='available'}
+function checkOD(){
+if(!SR||typeof SR.available!=='function'){od='unsupported';ls('jarvis-odstate',od);syncMic();return}
+ls('jarvis-odcheck','pending');
+var done=function(s){ls('jarvis-odcheck','');od=s;ls('jarvis-odstate',s);syncMic()};
+try{SR.available({langs:['en-GB'],processLocally:true}).then(done,function(){done('unsupported')})}catch(e){done('unsupported')}}
+(function(){if(ls('jarvis-odcheck')==='pending'){ls('jarvis-odcheck','');od='crashed';ls('jarvis-odstate',od)}else{var s=ls('jarvis-odstate');if(s)od=s}})();
+$('odc').onclick=checkOD;
+$('odi').onclick=function(){if(!SR||typeof SR.install!=='function')return;od='downloading';syncMic();
+try{SR.install({langs:['en-GB'],processLocally:true}).then(function(){checkOD()},function(){checkOD()})}catch(e){checkOD()}};
+function stopMic(){if(rec){try{rec.stop()}catch(e){}}}
+function syncMic(){var b=$('mic'),m=$('micmsg');
+$('odi').hidden=!(SR&&od==='downloadable');$('odc').hidden=!SR||typeof SR.available!=='function'||od==='crashed';
+$('odmsg').textContent=!SR?'This browser has no speech recognition.':od==='unchecked'?'Not checked yet. Tap Check on-device speech once on each device.':od==='crashed'?'The last check stopped the page, so on-device speech is turned off here. Cloud speech still works.':od==='available'?'On-device UK English speech is ready in this browser.':od==='downloadable'?'On-device UK English speech can be downloaded for this browser.':od==='downloading'?'Downloading on-device speech…':'This browser offers cloud speech recognition only.';
+if(!SR){b.disabled=true;m.textContent='This browser has no speech recognition. Use your keyboard dictation instead.';return}
+if($('lo').checked&&!useLocal()){b.disabled=true;m.textContent='Mic is off while Local-only is ticked, because speech here goes to the cloud. Type, or use keyboard dictation.';return}
+b.disabled=false;
+m.textContent=useLocal()?'Mic runs on this device. Your audio stays here.':'Mic is opt-in. Your browser sends the audio to its speech service. It is off while Local-only is ticked.'}
+$('mic').onclick=function(){
+if(!SR)return;var local=useLocal();if($('lo').checked&&!local)return;
+if(rec&&$('mic').classList.contains('on')){stopMic();return}
+rec=new SR();rec.lang='en-GB';rec.continuous=true;rec.interimResults=false;
+if(local){try{rec.processLocally=true}catch(e){}}
+rec.onresult=function(ev){var s='';for(var i=ev.resultIndex;i<ev.results.length;i++)if(ev.results[i].isFinal)s+=ev.results[i][0].transcript;if(s){var t=$('tx');t.value=(t.value?t.value+' ':'')+s.trim();$('so').value='voice';micMode=local?'on-device':'cloud'}};
+rec.onstart=function(){$('mic').classList.add('on');$('mic').textContent='Stop mic';setOrb('listening')};
+rec.onend=function(){$('mic').classList.remove('on');$('mic').textContent='Mic';setOrb('')};
+rec.onerror=function(ev){$('micmsg').textContent='Mic stopped: '+(ev.error||'unknown')+'.'};
+try{rec.start()}catch(e){}};
+syncMic();
+
+route();
+})();
+</script>
+</body>
+</html>
