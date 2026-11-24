@@ -204,7 +204,9 @@ summary{cursor:pointer;color:var(--acc);font-size:14px;min-height:24px}
 <section class="card">
 <h2>This device</h2>
 <div class="grid"><div><label for="dev">Device name</label><input id="dev" maxlength="20" placeholder="e.g. Nord5 or MacBook" autocomplete="off"></div></div>
-<div class="row"><button class="pri" id="devs" type="button">Save device name</button></div>
+<div class="grid"><div><label for="sbase">First session number on this device</label><input id="sbase" type="number" min="1" max="900" inputmode="numeric"></div></div>
+<p class="sub">Give each device its own block of 50 so Item IDs never clash: MacBook 1, Nord5 51, next device 101.</p>
+<div class="row"><button class="pri" id="devs" type="button">Save device settings</button></div>
 <p class="sub" id="devmsg" role="status">Each device keeps its own log. The name goes into the hand-off block, the conversation and every export, so Max and Min can see where an item came from.</p>
 </section>
 <section class="card">
@@ -278,7 +280,7 @@ function dl(text,type,name){var b=new Blob([text],{type:type+';charset=utf-8'}),
 
 var ST={captured:'Captured',handed:'Handed off',registered:'Registered',closed:'Closed'};
 var DAY=86400000;
-var items=[],conv=[],pending=[],synth=window.speechSynthesis||null,voices=[];
+var seen=[],items=[],conv=[],pending=[],synth=window.speechSynthesis||null,voices=[];
 var T0=new Date();
 $('dt').value=ymd(T0);$('st').value=hm(T0);
 
@@ -291,8 +293,11 @@ function saveConv(){ls('jarvis-conv',JSON.stringify(conv))}
 function drawStore(){$('store').textContent=storeOk?'Saved in this browser. Export a CSV regularly (Settings, Backup).':'This browser blocked saving. Items will be lost when the page closes. Export a CSV from Settings, Backup.'}
 (function load(){
 var raw=ls('jarvis-items');
-if(raw){try{var o=JSON.parse(raw);if(o&&o.items)items=o.items.map(norm);
-if(o&&o.dt===$('dt').value){if(o.sess)$('sess').value=o.sess;if(o.st)$('st').value=o.st}}catch(e){}}
+var o=null;if(raw){try{o=JSON.parse(raw);if(o&&o.items)items=o.items.map(norm)}catch(e){}}
+var same=false;
+if(raw){try{if(o&&o.dt===$('dt').value){same=true;if(o.sess)$('sess').value=o.sess;if(o.st)$('st').value=o.st}}catch(e){}}
+if(!same)$('sess').value=String(+ls('jarvis-sbase')||1);
+try{var sn=JSON.parse(ls('jarvis-seen')||'[]');if(Array.isArray(sn))seen=sn}catch(e){}
 try{var c=JSON.parse(ls('jarvis-conv')||'[]');if(Array.isArray(c))conv=c}catch(e){}
 })();
 drawStore();
@@ -344,7 +349,12 @@ Object.keys(ST).forEach(function(s){$('k_'+s).onclick=function(){$('fs').value=s
 /* ---------- sessions and IDs ---------- */
 function sdate(){return new Date(($('dt').value||ymd(new Date()))+'T00:00:00')}
 function sessKey(){var d=sdate();return two(d.getMonth()+1)+two(d.getDate())+' S'+($('sess').value||1)}
-function nextId(){var d=sdate(),pre='J-'+two(d.getMonth()+1)+two(d.getDate())+'-S'+($('sess').value||1)+'-',mx=0;items.forEach(function(it){if(it.id.indexOf(pre)===0){var n=parseInt(it.id.slice(pre.length),10);if(n>mx)mx=n}});return pre+two(mx+1)}
+function base(){return +ls('jarvis-sbase')||1}
+function mmdd(){var d=sdate();return two(d.getMonth()+1)+two(d.getDate())}
+function allIds(){return items.map(function(it){return it.id}).concat(seen)}
+function sessClosed(n){var pre='J-'+mmdd()+'-S'+n+'-';return items.some(function(it){return it.id.indexOf(pre)===0&&it.st!=='captured'})||seen.some(function(id){return id.indexOf(pre)===0})}
+function freshSess(){var pre='J-'+mmdd()+'-S',b=base(),mx=b-1;allIds().forEach(function(id){if(id.indexOf(pre)===0){var n=parseInt(id.slice(pre.length),10);if(n>=b&&n<b+50&&n>mx)mx=n}});return mx+1}
+function nextId(){var pre='J-'+mmdd()+'-S'+($('sess').value||1)+'-',mx=0;allIds().forEach(function(id){if(id.indexOf(pre)===0){var n=parseInt(id.slice(pre.length),10);if(n>mx)mx=n}});return pre+two(mx+1)}
 function sessOf(it){var m=/^J-(\d{4})-S(\d+)-/.exec(it.id);return m?m[1]+' S'+m[2]:'other'}
 function byId(id){for(var i=0;i<items.length;i++)if(items[i].id===id)return items[i];return null}
 function kb(n){return n<0?'':(n>=1048576?(n/1048576).toFixed(1)+' MB':Math.max(1,Math.round(n/1024))+' KB')}
@@ -358,14 +368,18 @@ function toHand(){return items.filter(function(it){return it.st==='captured'})}
 /* ---------- conversation ---------- */
 function log(who,tx,o){o=o||{};conv.push({t:new Date().toISOString(),w:who,tx:tx,id:o.id||'',src:o.src||'',k:sessKey(),dv:dev()});saveConv();renderConv(true)}
 function convKeys(){var seen={},a=[];conv.forEach(function(c){if(!seen[c.k]){seen[c.k]=1;a.push(c.k)}});var k=sessKey();if(!seen[k])a.push(k);return a}
-function fillConvSess(keep){var cur=keep||$('cs').value||sessKey(),ks=convKeys();$('cs').innerHTML=ks.map(function(k){return '<option value="'+esc(k)+'">Session '+esc(k)+'</option>'}).join('');$('cs').value=ks.indexOf(cur)>=0?cur:sessKey()}
+function fillConvSess(keep){var today='D:'+mmdd(),cur=keep||$('cs').value||today,ks=convKeys(),days=[],sd={};ks.forEach(function(k){var d=k.slice(0,4);if(!sd[d]){sd[d]=1;days.push(d)}});
+var vals=days.map(function(d){return 'D:'+d}).concat(ks);
+$('cs').innerHTML=days.map(function(d){return '<option value="D:'+esc(d)+'">'+(d===mmdd()?'Today':'Day '+esc(d))+', all sessions</option>'}).join('')+ks.map(function(k){return '<option value="'+esc(k)+'">Session '+esc(k)+'</option>'}).join('');
+$('cs').value=vals.indexOf(cur)>=0?cur:today}
+function convPick(v){return v.indexOf('D:')===0?convKeys().filter(function(k){return k.slice(0,4)===v.slice(2)}):[v]}
 function chipSt(it){return '<span class="chip s-'+it.st+'">'+esc(it.id)+' · '+ST[it.st]+(waiting(it)?' · waiting':'')+'</span>'}
 function renderConv(toNow){
-fillConvSess(toNow?sessKey():null);
-var k=$('cs').value,list=conv.filter(function(c){return c.k===k}),box=$('conv');
+fillConvSess(toNow?'D:'+mmdd():null);
+var ks=convPick($('cs').value),list=conv.filter(function(c){return ks.indexOf(c.k)>=0}),box=$('conv'),last='';
 if(!list.length){box.innerHTML='<p class="sub">Nothing said in this session yet. Speak or type an action above.</p>';return}
-box.innerHTML=list.map(function(c){var d=new Date(c.t),it=c.id?byId(c.id):null;
-return '<div class="ln'+(c.w==='j'?' j':'')+'"><time datetime="'+esc(c.t)+'">'+hm(d)+'</time><div><span class="who">'+(c.w==='j'?'JARVIS':'You')+'</span>'+(c.src?'<span class="src">('+esc(c.src)+')</span> ':'')+esc(c.tx)+(it?'<br>'+chipSt(it):'')+'</div></div>'}).join('');
+box.innerHTML=list.map(function(c){var d=new Date(c.t),it=c.id?byId(c.id):null,hd='';if(ks.length>1&&c.k!==last){last=c.k;hd='<p class="sub" style="margin:8px 0 2px;font-weight:700">Session '+esc(c.k)+'</p>'}
+return hd+'<div class="ln'+(c.w==='j'?' j':'')+'"><time datetime="'+esc(c.t)+'">'+hm(d)+'</time><div><span class="who">'+(c.w==='j'?'JARVIS':'You')+'</span>'+(c.src?'<span class="src">('+esc(c.src)+')</span> ':'')+esc(c.tx)+(it?'<br>'+chipSt(it):'')+'</div></div>'}).join('');
 box.scrollTop=box.scrollHeight}
 $('cs').onchange=function(){renderConv(false)};
 function convText(keys){
@@ -374,7 +388,7 @@ var a=new Date(l[0].t),b=new Date(l[l.length-1].t);
 out.push('JARVIS CONVERSATION | Device '+(l[0].dv||dev()||'not named')+' | Session '+k+' | '+ymd(a)+' '+hm(a)+'–'+hm(b)+' (device clock)');
 l.forEach(function(c){var d=new Date(c.t),it=c.id?byId(c.id):null;out.push('['+ymd(d)+' '+hm(d)+'] '+(c.w==='j'?'JARVIS':'You')+(c.src?' ('+c.src+')':'')+': '+c.tx+(it?' ['+it.id+' · '+ST[it.st]+']':''))});out.push('')});
 return out.join('\n')}
-$('ctx').onclick=function(){var k=$('cs').value;if(!conv.some(function(c){return c.k===k}))return;dl(convText([k]),'text/plain','jarvis-conversation-'+devTag()+k.replace(' ','-')+'-'+ymd(new Date())+'.txt')};
+$('ctx').onclick=function(){var v=$('cs').value,ks=convPick(v);if(!conv.some(function(c){return ks.indexOf(c.k)>=0}))return;dl(convText(ks),'text/plain','jarvis-conversation-'+devTag()+v.replace('D:','day-').replace(' ','-')+'-'+ymd(new Date())+'.txt')};
 $('ctx2').onclick=function(){if(!conv.length){$('bmsg').textContent='No conversation to save yet.';return}dl(convText(convKeys()),'text/plain','jarvis-conversations-'+devTag()+ymd(new Date())+'.txt');$('bmsg').textContent='Conversation saved to your downloads.'};
 $('cclr').onclick=function(){if(this.getAttribute('data-arm')!=='1'){this.setAttribute('data-arm','1');this.textContent='Tap again to clear (save it first)';return}this.removeAttribute('data-arm');this.textContent='Clear conversation history';conv=[];saveConv();renderConv(true);$('bmsg').textContent='Conversation history cleared. Items are kept.'};
 
@@ -407,6 +421,7 @@ if($('ns').checked)fl.push('NOT SURE');
 if(d){var dd=new Date(d+'T00:00:00'),wk=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dd.getDay()];fl.push('DUE '+d+' ('+wk+')');if($('wd').value&&$('wd').value!==wk){fl.push('NOT SURE: you said '+$('wd').value+', but '+d+' is a '+wk);$('cf').value='Low'}}
 var m=$('mo').value.trim(),c=$('cu').value.trim().toUpperCase();
 if(m){fl.push('MONEY '+m+' '+(c||'?'));if(!c){fl.push('NOT SURE: currency');$('cf').value='Low'}}
+var cur=+$('sess').value||base();if(sessClosed(cur)){var nw=freshSess();$('sess').value=nw;save();log('j','Session '+cur+' was already handed off, so this item starts Session '+nw+'.')}
 var it=norm({id:nextId(),ty:$('ty').value,tx:t,so:$('so').value,cf:$('cf').value,lo:$('lo').checked?'Y':'N',fl:fl,due:d,files:pending.slice(),dv:dev(),at:new Date().toISOString()});
 setSt(it,'captured');items.push(it);save();
 var src=it.so+(it.so==='voice'&&micMode?', '+micMode:'')+(it.lo==='Y'?', Local-only':'');
@@ -449,16 +464,18 @@ if(!o.length){e.textContent='Nothing to hand over.';return}
 if(!$('en').value){e.textContent='Enter the end time first.';return}
 o.forEach(function(it){setSt(it,'handed')});save();exportCsv();
 log('j','Handed off '+o.length+' item'+(o.length===1?'':'s')+' to Max: '+o.map(function(it){return it.id}).join(', ')+'. Waiting for Min to register them.');
+var nw=freshSess();$('sess').value=nw;$('st').value=hm(new Date());$('en').value='';save();log('j','New items will start Session '+nw+'.');
 buildHand();renderHome();e.textContent='Marked handed off. CSV saved to your downloads.'};
 $('rd').onclick=function(){var e=$('er2');e.textContent='';var o=toHand();if(!o.length){e.textContent='Nothing to read.';return}
 var lo=o.some(function(it){return it.lo==='Y'});
 if(!say(o.map(function(it){return 'Item '+it.id.slice(-2)+'. '+it.ty.toLowerCase()+'. '+it.tx+'. Confidence '+it.cf.toLowerCase()+'.'}).join(' '),lo))e.textContent=synth?'Not read: the block has Local-only items and no on-device voice was found.':'This browser cannot speak.'};
 $('pb').onclick=function(){
-var txt=$('pl').value,ids=txt.match(/J-\d{4}-S\d+-\d{2,}/g)||[],seen={},reg=[],had=[],unk=[];
-ids.forEach(function(id){if(seen[id])return;seen[id]=1;var it=byId(id);if(!it)unk.push(id);else if(it.st==='registered'||it.st==='closed')had.push(id);else{setSt(it,'registered');reg.push(id)}});
+var txt=$('pl').value,ids=txt.match(/J-\d{4}-S\d+-\d{2,}/g)||[],dup={},reg=[],had=[],unk=[];
+ids.forEach(function(id){if(dup[id])return;dup[id]=1;var it=byId(id);if(!it)unk.push(id);else if(it.st==='registered'||it.st==='closed')had.push(id);else{setSt(it,'registered');reg.push(id)}});
 if(!ids.length){$('pr').textContent='No Item IDs found in that text.';return}
+unk.forEach(function(id){if(seen.indexOf(id)<0)seen.push(id)});ls('jarvis-seen',JSON.stringify(seen));
 save();$('pl').value='';
-var msg=(reg.length?'Registered '+reg.length+': '+reg.join(', ')+'. ':'')+(had.length?'Already registered or closed: '+had.join(', ')+'. ':'')+(unk.length?'Not in this log, please check: '+unk.join(', ')+'.':'');
+var msg=(reg.length?'Registered '+reg.length+': '+reg.join(', ')+'. ':'')+(had.length?'Already registered or closed: '+had.join(', ')+'. ':'')+(unk.length?'Not in this log, please check: '+unk.join(', ')+'. JARVIS will not reuse these numbers.':'');
 $('pr').textContent=msg;log('j','Update from Max or Min. '+msg.trim());renderHome()};
 
 /* ---------- CSV, Markdown ---------- */
@@ -550,10 +567,12 @@ if(c==='silent'||c==='start')return 'Mic did not start.'+(f?' The page is open a
 return 'Mic stopped: '+(c||'unknown')+'.'+tip}
 syncMic();
 
-function drawDev(){var d=dev();$('devh').textContent=d?' · '+d:'';document.title=d?'JARVIS · '+d:'JARVIS';$('dev').value=d;$('devwarn').hidden=!!d}
+function drawDev(){$('sbase').value=base();var d=dev();$('devh').textContent=d?' · '+d:'';document.title=d?'JARVIS · '+d:'JARVIS';$('dev').value=d;$('devwarn').hidden=!!d}
 $('devs').onclick=function(){var v=$('dev').value.trim().replace(/\s+/g,' ');
 if(!/^[A-Za-z0-9 _-]{2,20}$/.test(v)){$('devmsg').textContent='Use 2 to 20 letters, numbers, spaces, - or _.';return}
-var old=dev();ls('jarvis-device',v);drawDev();$('devmsg').textContent='Saved. This device is '+v+'.';if(old!==v)log('j','This device is now named '+v+(old?' (was '+old+')':'')+'.')};
+var sb=parseInt($('sbase').value,10);if(!(sb>=1&&sb<=900)){$('devmsg').textContent='First session number must be between 1 and 900.';return}
+var ob=base();ls('jarvis-sbase',String(sb));if(sb!==ob){var nw=freshSess();if(+$('sess').value<sb||+$('sess').value>=sb+50||sessClosed(+$('sess').value)){$('sess').value=nw;save()}log('j','Sessions on this device now start at '+sb+'. Current session: '+$('sess').value+'.')}
+var old=dev();ls('jarvis-device',v);drawDev();$('devmsg').textContent='Saved. This device is '+v+', sessions from '+sb+'.';if(old!==v)log('j','This device is now named '+v+(old?' (was '+old+')':'')+'.')};
 drawDev();
 route();
 })();
