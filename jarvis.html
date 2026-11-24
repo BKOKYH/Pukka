@@ -220,7 +220,7 @@ summary{cursor:pointer;color:var(--acc);font-size:14px;min-height:24px}
 <h2>Obsidian vault (MacBook)</h2>
 <p class="sub" id="vsupport"></p>
 <div class="row"><button id="vpick" type="button">Choose vault folder</button><button id="vforget" type="button">Disconnect vault</button></div>
-<div class="grid"><div style="grid-column:1/-1"><label for="vconf">Confidential folder names, separated by commas</label><input id="vconf" autocomplete="off"></div></div>
+<div class="grid"><div style="grid-column:1/-1"><label for="vconf">Confidential folder names, separated by commas (number prefixes such as 10- are ignored)</label><input id="vconf" autocomplete="off"></div></div>
 <div class="row"><button id="vconfs" type="button">Save folder names</button></div>
 <p class="sub">A folder is also confidential if it holds a note named _CONFIDENTIAL.md. Before showing anything from a confidential folder, JARVIS asks; your approval lasts until the page reloads. Read-only: JARVIS cannot change, move or delete notes, and nothing leaves this Mac.</p>
 <p class="sub" id="vamsg" role="status"></p>
@@ -594,9 +594,10 @@ drawDev();
 var VS=typeof window.showDirectoryPicker==='function',vh=null,vidx=null,vapp={},vskip={},vlast=null;
 function idb(){return new Promise(function(res,rej){var r=indexedDB.open('jarvis',1);r.onupgradeneeded=function(){r.result.createObjectStore('kv')};r.onsuccess=function(){res(r.result)};r.onerror=function(){rej(r.error)}})}
 function kv(op,k,v){return idb().then(function(db){return new Promise(function(res,rej){var t=db.transaction('kv',op==='get'?'readonly':'readwrite'),st=t.objectStore('kv'),r=op==='get'?st.get(k):op==='del'?st.delete(k):st.put(v,k);r.onsuccess=function(){res(r.result)};r.onerror=function(){rej(r.error)}})})}
-var CONF0='Clients, M&A';
+var CONF0='Clients, Deals, M&A';
+function fnorm(x){return String(x).trim().toLowerCase().replace(/^\d+\s*[-_.]\s*/,'')}
 function confRaw(){var v=ls('jarvis-vconf');return v===null?CONF0:v}
-function confNames(){return confRaw().split(',').map(function(x){return x.trim().toLowerCase()}).filter(Boolean)}
+function confNames(){return confRaw().split(',').map(fnorm).filter(Boolean)}
 $('vconf').value=confRaw();
 $('vconfs').onclick=function(){ls('jarvis-vconf',$('vconf').value);vapp={};$('vamsg').textContent='Saved. Confidential folders: '+(confNames().join(', ')||'none by name')+'. Earlier approvals are cleared.';if(vlast)vrender()};
 function drawVault(){
@@ -614,7 +615,7 @@ async function walk(dir,path){for await(var e of dir.entries()){var name=e[0],h=
 if(h.kind==='directory')await walk(h,path?path+'/'+name:name);
 else if(/\.md$/i.test(name)){if(name.toLowerCase()==='_confidential.md'){marks[path]=1;continue}var f=await h.getFile();if(f.size>2000000)continue;notes.push({p:path,n:name.replace(/\.md$/i,''),t:await f.text()})}}}
 await walk(vh,'');vidx={notes:notes,marks:marks}}
-function gate(path){var cn=confNames();if(vidx.marks[''])return '';var seg=path?path.split('/'):[];for(var i=0;i<seg.length;i++){var sub=seg.slice(0,i+1).join('/');if(cn.indexOf(seg[i].toLowerCase())>=0||vidx.marks[sub])return sub}return null}
+function gate(path){var cn=confNames();if(vidx.marks[''])return '';var seg=path?path.split('/'):[];for(var i=0;i<seg.length;i++){var sub=seg.slice(0,i+1).join('/');if(cn.indexOf(fnorm(seg[i]))>=0||vidx.marks[sub])return sub}return null}
 function snip(t,w){var lo=t.toLowerCase(),i=lo.indexOf(w[0]);if(i<0)return t.slice(0,160);var a=Math.max(0,t.lastIndexOf('\n',i)+1),b=t.indexOf('\n',i);if(b<0)b=t.length;var l=t.slice(a,b).trim();if(l.length>180){var c=Math.max(0,i-a-60);l=(c?'…':'')+l.slice(c,c+180)+'…'}return l}
 function vrender(){var h=vlast,html='',open=h.hits.filter(function(x){return x.g===null||vapp[x.g]}),groups={};
 h.hits.forEach(function(x){if(x.g!==null&&!vapp[x.g]&&!vskip[x.g])groups[x.g]=(groups[x.g]||0)+1});
