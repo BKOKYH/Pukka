@@ -149,6 +149,13 @@ summary{cursor:pointer;color:var(--acc);font-size:14px;min-height:24px}
 <div class="row"><button id="gpaste" type="button">Update from Max or Min</button></div>
 </section>
 
+<section class="card" id="vcard" hidden aria-labelledby="h_vault">
+<h2 id="h_vault">Search Obsidian vault <span id="vname" class="chip"></span></h2>
+<div class="bar" style="margin-top:4px"><input type="text" id="vq" placeholder="Words to find" aria-label="Words to find in the vault" autocomplete="off"><button class="pri" id="vs" type="button">Search</button></div>
+<p class="sub" id="vst" role="status"></p>
+<div id="vres"></div>
+</section>
+
 <section class="card" aria-labelledby="h_conv">
 <div class="mh"><h2 id="h_conv" style="margin:0">Conversation</h2>
 <div><select id="cs" aria-label="Conversation session" style="min-height:36px;padding:4px 8px"></select></div></div>
@@ -208,6 +215,15 @@ summary{cursor:pointer;color:var(--acc);font-size:14px;min-height:24px}
 <p class="sub">Give each device its own block of 50 so Item IDs never clash: MacBook 1, Nord5 51, next device 101.</p>
 <div class="row"><button class="pri" id="devs" type="button">Save device settings</button></div>
 <p class="sub" id="devmsg" role="status">Each device keeps its own log. The name goes into the hand-off block, the conversation and every export, so Max and Min can see where an item came from.</p>
+</section>
+<section class="card">
+<h2>Obsidian vault (MacBook)</h2>
+<p class="sub" id="vsupport"></p>
+<div class="row"><button id="vpick" type="button">Choose vault folder</button><button id="vforget" type="button">Disconnect vault</button></div>
+<div class="grid"><div style="grid-column:1/-1"><label for="vconf">Confidential folder names, separated by commas</label><input id="vconf" autocomplete="off"></div></div>
+<div class="row"><button id="vconfs" type="button">Save folder names</button></div>
+<p class="sub">A folder is also confidential if it holds a note named _CONFIDENTIAL.md. Before showing anything from a confidential folder, JARVIS asks; your approval lasts until the page reloads. Read-only: JARVIS cannot change, move or delete notes, and nothing leaves this Mac.</p>
+<p class="sub" id="vamsg" role="status"></p>
 </section>
 <section class="card">
 <h2>Voice read-back (UK)</h2>
@@ -574,6 +590,55 @@ var sb=parseInt($('sbase').value,10);if(!(sb>=1&&sb<=900)){$('devmsg').textConte
 var ob=base();ls('jarvis-sbase',String(sb));if(sb!==ob){var nw=freshSess();if(+$('sess').value<sb||+$('sess').value>=sb+50||sessClosed(+$('sess').value)){$('sess').value=nw;save()}log('j','Sessions on this device now start at '+sb+'. Current session: '+$('sess').value+'.')}
 var old=dev();ls('jarvis-device',v);drawDev();$('devmsg').textContent='Saved. This device is '+v+', sessions from '+sb+'.';if(old!==v)log('j','This device is now named '+v+(old?' (was '+old+')':'')+'.')};
 drawDev();
+/* ---------- Obsidian vault (read-only, local) ---------- */
+var VS=typeof window.showDirectoryPicker==='function',vh=null,vidx=null,vapp={},vskip={},vlast=null;
+function idb(){return new Promise(function(res,rej){var r=indexedDB.open('jarvis',1);r.onupgradeneeded=function(){r.result.createObjectStore('kv')};r.onsuccess=function(){res(r.result)};r.onerror=function(){rej(r.error)}})}
+function kv(op,k,v){return idb().then(function(db){return new Promise(function(res,rej){var t=db.transaction('kv',op==='get'?'readonly':'readwrite'),st=t.objectStore('kv'),r=op==='get'?st.get(k):op==='del'?st.delete(k):st.put(v,k);r.onsuccess=function(){res(r.result)};r.onerror=function(){rej(r.error)}})})}
+var CONF0='Clients, M&A';
+function confRaw(){var v=ls('jarvis-vconf');return v===null?CONF0:v}
+function confNames(){return confRaw().split(',').map(function(x){return x.trim().toLowerCase()}).filter(Boolean)}
+$('vconf').value=confRaw();
+$('vconfs').onclick=function(){ls('jarvis-vconf',$('vconf').value);vapp={};$('vamsg').textContent='Saved. Confidential folders: '+(confNames().join(', ')||'none by name')+'. Earlier approvals are cleared.';if(vlast)vrender()};
+function drawVault(){
+$('vsupport').textContent=VS?(vh?'Connected to "'+vh.name+'". Read-only.':'Not connected. Choose the folder that holds your vault.'):'This browser cannot open folders. Vault search works in Chrome on the MacBook only.';
+$('vpick').disabled=!VS;$('vforget').disabled=!vh;$('vcard').hidden=!VS;
+$('vname').textContent=vh?vh.name:'not connected';$('vs').disabled=!vh;
+if(VS&&!vh)$('vst').textContent='Choose your vault in Settings, Obsidian vault.'}
+$('vpick').onclick=function(){if(!VS)return;window.showDirectoryPicker({mode:'read'}).then(function(h){
+vh=h;vidx=null;vapp={};vlast=null;$('vres').innerHTML='';kv('put','vault',h).catch(function(){});drawVault();
+h.getDirectoryHandle('.obsidian').then(function(){$('vamsg').textContent='Vault connected: '+h.name+'.'},function(){$('vamsg').textContent='Connected to '+h.name+', but it has no .obsidian folder, so it may not be an Obsidian vault. Check the path in Obsidian, Manage vaults.'});
+log('j','Vault connected: '+h.name+' (read-only).')},function(e){if(e&&e.name!=='AbortError')$('vamsg').textContent='Could not open that folder: '+(e.message||e.name)+'. Chrome blocks some top-level folders; choose the vault folder itself.'})};
+$('vforget').onclick=function(){vh=null;vidx=null;vapp={};vlast=null;$('vres').innerHTML='';kv('del','vault').catch(function(){});drawVault();$('vamsg').textContent='Vault disconnected.';log('j','Vault disconnected.')};
+async function vindex(){var notes=[],marks={};
+async function walk(dir,path){for await(var e of dir.entries()){var name=e[0],h=e[1];if(name.charAt(0)==='.')continue;
+if(h.kind==='directory')await walk(h,path?path+'/'+name:name);
+else if(/\.md$/i.test(name)){if(name.toLowerCase()==='_confidential.md'){marks[path]=1;continue}var f=await h.getFile();if(f.size>2000000)continue;notes.push({p:path,n:name.replace(/\.md$/i,''),t:await f.text()})}}}
+await walk(vh,'');vidx={notes:notes,marks:marks}}
+function gate(path){var cn=confNames();if(vidx.marks[''])return '';var seg=path?path.split('/'):[];for(var i=0;i<seg.length;i++){var sub=seg.slice(0,i+1).join('/');if(cn.indexOf(seg[i].toLowerCase())>=0||vidx.marks[sub])return sub}return null}
+function snip(t,w){var lo=t.toLowerCase(),i=lo.indexOf(w[0]);if(i<0)return t.slice(0,160);var a=Math.max(0,t.lastIndexOf('\n',i)+1),b=t.indexOf('\n',i);if(b<0)b=t.length;var l=t.slice(a,b).trim();if(l.length>180){var c=Math.max(0,i-a-60);l=(c?'…':'')+l.slice(c,c+180)+'…'}return l}
+function vrender(){var h=vlast,html='',open=h.hits.filter(function(x){return x.g===null||vapp[x.g]}),groups={};
+h.hits.forEach(function(x){if(x.g!==null&&!vapp[x.g]&&!vskip[x.g])groups[x.g]=(groups[x.g]||0)+1});
+Object.keys(groups).forEach(function(g){var lab=g||vh.name;html+='<div class="wait" style="margin-top:8px">'+groups[g]+' match'+(groups[g]===1?'':'es')+' in <b>'+esc(lab)+'</b>, a confidential folder. Show them?<div class="row" style="margin-top:6px"><button type="button" class="pri" data-va="'+esc(g)+'">Allow until reload</button><button type="button" data-vk="'+esc(g)+'">Skip</button></div></div>'});
+html+=open.slice(0,30).map(function(x){var file=(x.p?x.p+'/':'')+x.n;return '<div class="item"><b>'+esc(x.n)+'</b> <span class="chip">'+esc(x.p||'/')+'</span>'+(x.g!==null?'<span class="chip f">confidential</span>':'')+'<div class="sub">'+esc(x.s)+'</div><a href="obsidian://open?vault='+encodeURIComponent(vh.name)+'&amp;file='+encodeURIComponent(file)+'">Open in Obsidian</a></div>'}).join('');
+if(open.length>30)html+='<p class="sub">Showing 30 of '+open.length+'. Add a word to narrow the search.</p>';
+$('vres').innerHTML=html||'';
+var as=$('vres').querySelectorAll('button[data-va]');for(var i=0;i<as.length;i++)as[i].onclick=function(){var g=this.getAttribute('data-va');vapp[g]=1;log('j','You approved the confidential folder '+(g||vh.name)+' until the page reloads.');vrender()};
+var ks=$('vres').querySelectorAll('button[data-vk]');for(var j=0;j<ks.length;j++)ks[j].onclick=function(){var g=this.getAttribute('data-vk');vskip[g]=1;log('j','You skipped the confidential folder '+(g||vh.name)+' for this search.');vrender()}}
+$('vq').addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();$('vs').click()}});
+$('vs').onclick=async function(){var q=$('vq').value.trim(),st=$('vst');if(!q||!vh)return;
+if(/password|passcode|\bpin\b|\b\d{9,}\b/i.test(q)){st.textContent='That looks like a password, PIN or account number. Search not run.';return}
+try{if(vh.queryPermission){var pm=await vh.queryPermission({mode:'read'});if(pm!=='granted')pm=await vh.requestPermission({mode:'read'});if(pm!=='granted'){st.textContent='Chrome did not allow reading the vault. Tap Search again and choose Allow.';return}}
+if(!vidx){st.textContent='Reading the vault…';await vindex()}}catch(e){st.textContent='Could not read the vault: '+(e.message||e.name)+'. Choose it again in Settings.';return}
+var w=q.toLowerCase().split(/\s+/).filter(Boolean);vskip={};
+var hits=vidx.notes.filter(function(x){var all=(x.n+'\n'+x.t).toLowerCase();return w.every(function(k){return all.indexOf(k)>=0})}).map(function(x){return {p:x.p,n:x.n,s:snip(x.t,w),g:gate(x.p)}});
+vlast={q:q,hits:hits};
+var shown=hits.filter(function(x){return x.g===null||vapp[x.g]}).length,held=hits.length-shown,gs={};hits.forEach(function(x){if(x.g!==null&&!vapp[x.g])gs[x.g||vh.name]=1});
+st.textContent=hits.length?hits.length+' note'+(hits.length===1?'':'s')+' found in '+vidx.notes.length+' searched.':'No notes contain all of those words ('+vidx.notes.length+' searched).';
+log('u','Search vault: '+q,{src:'vault'});
+log('j','Found '+shown+' note'+(shown===1?'':'s')+(held?'. '+held+' more in confidential folder'+(Object.keys(gs).length===1?'':'s')+' '+Object.keys(gs).join(', ')+', waiting for your approval':'')+'.');
+vrender()};
+drawVault();
+if(VS)kv('get','vault').then(function(h){if(h){vh=h;drawVault()}},function(){});
 route();
 })();
 </script>
