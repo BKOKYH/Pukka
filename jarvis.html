@@ -198,7 +198,6 @@ summary{cursor:pointer;color:var(--acc);font-size:14px;min-height:24px}
 <div class="row">
 <button class="pri" id="mk" type="button">Mark handed off and save CSV</button>
 <button id="rd" type="button">Read aloud</button>
-<button id="wl" type="button">Write log note now</button>
 </div>
 <p class="sub">Without sharing approval, Local-only items go by Item ID only. Marking saves a CSV backup.</p>
 <p class="err" id="er2" role="alert"></p>
@@ -232,11 +231,7 @@ summary{cursor:pointer;color:var(--acc);font-size:14px;min-height:24px}
 <div class="row"><button id="vpick" type="button">Add vault folder</button></div>
 <div class="grid"><div style="grid-column:1/-1"><label for="vconf">Confidential folder names, separated by commas (number prefixes such as 10- are ignored)</label><input id="vconf" autocomplete="off"></div></div>
 <div class="row"><button id="vconfs" type="button">Save folder names</button></div>
-<p class="sub">A folder is also confidential if it holds a note named _CONFIDENTIAL.md. Results from confidential folders are shown with a RESTRICTED flag naming the vault and folder. You decide what, if anything, is shared. Search is read-only and nothing leaves this Mac.</p>
-<h2 style="margin-top:14px">Daily log folder</h2>
-<p class="sub" id="lgstat"></p>
-<div class="row"><button id="lgpick" type="button">Choose log folder</button><button id="lgforget" type="button">Disconnect log folder</button></div>
-<p class="sub">JARVIS writes one new note per hand-off into this folder only, for example PUKKA-VAULT/00-INBOX/JARVIS-LOG (create it in Finder first). It never edits, moves or deletes a note. Local-only item text is left out of the note.</p>
+<p class="sub">A folder is also confidential if it holds a note named _CONFIDENTIAL.md. Results from confidential folders are shown with a RESTRICTED flag naming the vault and folder. You decide what, if anything, is shared. Search is read-only, nothing leaves this Mac, and JARVIS never writes to Obsidian.</p>
 <p class="sub" id="vamsg" role="status"></p>
 </section>
 <section class="card">
@@ -495,8 +490,7 @@ if(!$('en').value){e.textContent='Enter the end time first.';return}
 o.forEach(function(it){setSt(it,'handed')});save();exportCsv();
 log('j','Handed off '+o.length+' item'+(o.length===1?'':'s')+' to Max: '+o.map(function(it){return it.id}).join(', ')+'. Waiting for Min to register them.');
 var nw=freshSess();$('sess').value=nw;$('st').value=hm(new Date());$('en').value='';save();log('j','New items will start Session '+nw+'.');
-buildHand();renderHome();$('shr').checked=false;e.textContent='Marked handed off. CSV saved to your downloads.';
-if(lgdir)writeLog(o).then(function(m){e.textContent='Marked handed off. CSV saved. '+m},function(x){e.textContent='Marked handed off and CSV saved, but the log note was not written ('+(x.message||x.name)+'). Tap Write log note now.'})};
+buildHand();renderHome();$('shr').checked=false;e.textContent='Marked handed off. CSV saved to your downloads.';};
 $('rd').onclick=function(){var e=$('er2');e.textContent='';var o=toHand();if(!o.length){e.textContent='Nothing to read.';return}
 var lo=o.some(function(it){return it.lo==='Y'});
 if(!say(o.map(function(it){return 'Item '+it.id.slice(-2)+'. '+it.ty.toLowerCase()+'. '+it.tx+'. Confidence '+it.cf.toLowerCase()+'.'}).join(' '),lo))e.textContent=synth?'Not read: the block has Local-only items and no on-device voice was found.':'This browser cannot speak.'};
@@ -607,7 +601,7 @@ var mx=$('mxe').value.trim();if(mx&&!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(mx)){$('d
 var old=dev();ls('jarvis-device',v);drawDev();$('devmsg').textContent='Saved. This device is '+v+', sessions from '+sb+'.';if(old!==v)log('j','This device is now named '+v+(old?' (was '+old+')':'')+'.')};
 drawDev();
 /* ---------- Obsidian vaults (read-only search) and log folder (create-only) ---------- */
-var VS=typeof window.showDirectoryPicker==='function',vaults=[],vapp={},vskip={},vlast=null,lgdir=null;
+var VS=typeof window.showDirectoryPicker==='function',vaults=[],vapp={},vskip={},vlast=null;
 function idb(){return new Promise(function(res,rej){var r=indexedDB.open('jarvis',1);r.onupgradeneeded=function(){r.result.createObjectStore('kv')};r.onsuccess=function(){res(r.result)};r.onerror=function(){rej(r.error)}})}
 function kv(op,k,v){return idb().then(function(db){return new Promise(function(res,rej){var t=db.transaction('kv',op==='get'?'readonly':'readwrite'),st=t.objectStore('kv'),r=op==='get'?st.get(k):op==='del'?st.delete(k):st.put(v,k);r.onsuccess=function(){res(r.result)};r.onerror=function(){rej(r.error)}})})}
 var CONF0='Clients, Deals, M&A, Financials, Personal';
@@ -616,25 +610,21 @@ function confRaw(){var v=ls('jarvis-vconf');return v===null?CONF0:v}
 function confNames(){return confRaw().split(',').map(fnorm).filter(Boolean)}
 $('vconf').value=confRaw();
 $('vconfs').onclick=function(){ls('jarvis-vconf',$('vconf').value);vapp={};$('vamsg').textContent='Saved. Confidential folders: '+(confNames().join(', ')||'none by name')+'. Earlier approvals are cleared.';if(vlast)vrender()};
-function vstats(){try{return JSON.parse(ls('jarvis-vstats')||'null')||{n:0,ap:[]}}catch(e){return {n:0,ap:[]}}}
-function vstat(fn){var v=vstats();fn(v);ls('jarvis-vstats',JSON.stringify(v))}
 function saveVaults(){kv('put','vaults',vaults.map(function(v){return v.h})).catch(function(){})}
 async function perm(h,mode){if(!h.queryPermission)return true;var p=await h.queryPermission({mode:mode});if(p!=='granted')p=await h.requestPermission({mode:mode});return p==='granted'}
 function drawVault(){
 $('vsupport').textContent=VS?(vaults.length?vaults.length+' vault'+(vaults.length===1?'':'s')+' connected, read-only.':'No vault connected. Add the folder that holds each vault.'):'This browser cannot open folders. Vault search and the daily log work in Chrome on the MacBook only.';
 $('vlist').innerHTML=vaults.map(function(v,i){return '<div class="row" style="margin-top:6px"><span class="chip">'+esc(v.h.name)+'</span><button type="button" data-vr="'+i+'">Remove</button></div>'}).join('');
 var rs=$('vlist').querySelectorAll('button[data-vr]');for(var i=0;i<rs.length;i++)rs[i].onclick=function(){var v=vaults.splice(+this.getAttribute('data-vr'),1)[0];saveVaults();vlast=null;$('vres').innerHTML='';drawVault();log('j','Vault removed: '+v.h.name+'.')};
-$('vpick').disabled=!VS||vaults.length>=3;$('vcard').hidden=!VS;$('lgpick').disabled=!VS;$('lgforget').disabled=!lgdir;$('wl').hidden=!VS;
+$('vpick').disabled=!VS||vaults.length>=3;$('vcard').hidden=!VS;
 $('vname').textContent=vaults.length?vaults.map(function(v){return v.h.name}).join(' + '):'not connected';$('vs').disabled=!vaults.length;
-$('lgstat').textContent=!VS?'':lgdir?'Writing log notes to "'+lgdir.name+'".':'No log folder chosen yet.';
+
 if(VS&&!vaults.length)$('vst').textContent='Add your vaults in Settings, Obsidian vaults.'}
 $('vpick').onclick=function(){if(!VS)return;window.showDirectoryPicker({id:'vault',mode:'read'}).then(async function(h){
 for(var i=0;i<vaults.length;i++)if(await vaults[i].h.isSameEntry(h)){$('vamsg').textContent=h.name+' is already connected.';return}
 vaults.push({h:h,idx:null});saveVaults();vlast=null;$('vres').innerHTML='';drawVault();
 h.getDirectoryHandle('.obsidian').then(function(){$('vamsg').textContent='Vault connected: '+h.name+'.'},function(){$('vamsg').textContent='Connected to '+h.name+', but it has no .obsidian folder, so it may not be a vault. Check the path in Obsidian, Manage vaults.'});
 log('j','Vault connected: '+h.name+' (read-only).')},function(e){if(e&&e.name!=='AbortError')$('vamsg').textContent='Could not open that folder: '+(e.message||e.name)+'. Chrome blocks some top-level folders; choose the vault folder itself.'})};
-$('lgpick').onclick=function(){if(!VS)return;window.showDirectoryPicker({id:'jlog',mode:'readwrite'}).then(function(h){lgdir=h;kv('put','logdir',h).catch(function(){});drawVault();$('vamsg').textContent='Log folder set: '+h.name+'.';log('j','Daily log folder set: '+h.name+'. JARVIS will only add new notes there.')},function(e){if(e&&e.name!=='AbortError')$('vamsg').textContent='Could not use that folder: '+(e.message||e.name)+'.'})};
-$('lgforget').onclick=function(){lgdir=null;kv('del','logdir').catch(function(){});drawVault();log('j','Daily log folder disconnected.')};
 async function vindex(v){var notes=[],marks={};
 async function walk(dir,path){for await(var e of dir.entries()){var name=e[0],h=e[1];if(name.charAt(0)==='.')continue;
 if(h.kind==='directory')await walk(h,path?path+'/'+name:name);
@@ -658,33 +648,9 @@ v.idx.notes.forEach(function(x){var all=(x.n+'\n'+x.t).toLowerCase();if(w.every(
 vlast={q:q,hits:hits};
 var gs={},fl=0;hits.forEach(function(x){if(x.g!==null){fl++;gs[glab(x)]=1}});
 st.textContent=(hits.length?hits.length+' note'+(hits.length===1?'':'s')+' found in '+total+' searched.':'No notes contain all of those words ('+total+' searched).')+(miss.length?' Skipped: '+miss.join(', ')+'.':'');
-vstat(function(v){v.n++;Object.keys(gs).forEach(function(l){if(v.ap.indexOf(l)<0)v.ap.push(l)})});
 log('u','Search vault: '+q,{src:'vault'});
 log('j','Found '+hits.length+' note'+(hits.length===1?'':'s')+(fl?', '+fl+' flagged RESTRICTED from '+Object.keys(gs).join(', '):'')+(miss.length?'. Skipped: '+miss.join(', '):'')+'.');
 vrender()};
-/* daily log note */
-function mdLine(it){var t=it.lo==='Y'?'[Local-only: text kept in JARVIS on '+(it.dv||dev()||'this device')+']':it.tx.replace(/\s+/g,' ');return '- `'+it.id+'` '+it.ty+' · '+t+' · '+it.cf+(it.fl.length?' · '+it.fl.join('; '):'')}
-function since(s,t){return items.filter(function(it){return it.stt&&it.stt[s]&&Date.parse(it.stt[s])>t})}
-async function writeLog(handed){
-if(!lgdir)return 'No log folder chosen (Settings, Daily log folder).';
-if(!(await perm(lgdir,'readwrite')))return 'Chrome did not allow writing to the log folder.';
-var n=new Date(),last=+ls('jarvis-lastlog')||0,d=dev()||'device',vs=vstats();
-var reg=since('registered',last),clo=since('closed',last),wt=items.filter(waiting),cap=toHand();
-var md=['---','type: jarvis-log','device: '+d,'date: '+ymd(n),'time: "'+hm(n)+'"','session: '+(handed.length?sessOf(handed[0]).split(' S')[1]:$('sess').value),'handed_off: '+handed.length,'registered_since_last: '+reg.length,'waiting_over_24h: '+wt.length,'time_source: device clock','---','','# JARVIS log · '+d+' · '+ymd(n)+' '+hm(n),'',
-'Previous log: '+(last?ymd(new Date(last))+' '+hm(new Date(last)):'none'),'',
-'## Handed off in this block',handed.length?handed.map(mdLine).join('\n'):'- None','',
-'## Registered since last log',reg.length?reg.map(mdLine).join('\n'):'- None','',
-'## Closed since last log',clo.length?clo.map(mdLine).join('\n'):'- None','',
-'## Waiting over 24 hours (check with Max)',wt.length?wt.map(mdLine).join('\n'):'- None','',
-'## Still captured, not handed off',cap.length?cap.map(mdLine).join('\n'):'- None','',
-'## Vault activity since last log','- Searches: '+vs.n,'- Restricted folders in results: '+(vs.ap.length?vs.ap.join(', '):'none'),'',
-'#jarvis-log'].join('\n')+'\n';
-var base=ymd(n)+' '+two(n.getHours())+two(n.getMinutes())+' '+d.replace(/[\\/:*?"<>|]/g,'-'),name=base+'.md',k=2;
-while(true){try{await lgdir.getFileHandle(name);name=base+' ('+k+').md';k++}catch(e){if(e&&e.name==='NotFoundError')break;throw e}}
-var fh=await lgdir.getFileHandle(name,{create:true}),wr=await fh.createWritable();await wr.write(md);await wr.close();
-ls('jarvis-lastlog',String(n.getTime()));ls('jarvis-vstats',JSON.stringify({n:0,ap:[]}));
-log('j','Log note written to Obsidian: '+lgdir.name+'/'+name+'.');
-return 'Log note written: '+name}
 function emailParts(){var o=toHand(),sh=$('shr').checked,ss={};o.forEach(function(it){ss[sessOf(it).split(' S')[1]]=1});
 var subj='JARVIS HANDOFF | '+(dev()||'device not named')+' | Session '+Object.keys(ss).join(', ')+' | '+$('dt').value+' '+$('en').value;
 var lines=o.map(function(it){var t=(it.lo==='Y'&&!sh)?'[Local-only: text kept in JARVIS]':it.tx;return [it.id,it.ty,t,it.so,it.cf,it.lo,flags(it)].join(' | ')});
@@ -702,10 +668,10 @@ if(m.sh&&m.lo.length)log('j','You approved sharing Local-only text for '+m.lo.ma
 log('j','Email to Max drafted for '+m.o.length+' item'+(m.o.length===1?'':'s')+(m.lo.length?(m.sh?' (Local-only text included)':' (Local-only text left out)'):'')+'. Press Send, then mark handed off.');
 e.textContent='Email drafted. Press Send in '+(kind==='gmail'?'Gmail':'your mail app')+', then tap Mark handed off.'}
 $('em').onclick=function(){emailGo('gmail')};$('em2').onclick=function(){emailGo('app')};
-$('wl').onclick=function(){var e=$('er2');e.textContent='Writing…';writeLog([]).then(function(m){e.textContent=m},function(x){e.textContent='Log note not written: '+(x.message||x.name)+'.'})};
+try{localStorage.removeItem('jarvis-vstats');localStorage.removeItem('jarvis-lastlog')}catch(e){}
 drawVault();
 if(VS){kv('get','vaults').then(function(a){if(a&&a.length){vaults=a.map(function(h){return {h:h,idx:null}});drawVault()}else return kv('get','vault').then(function(h){if(h){vaults=[{h:h,idx:null}];saveVaults();drawVault()}})},function(){});
-kv('get','logdir').then(function(h){if(h){lgdir=h;drawVault()}},function(){})}
+kv('del','logdir').catch(function(){})}
 route();
 })();
 </script>
