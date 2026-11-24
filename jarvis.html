@@ -188,13 +188,19 @@ summary{cursor:pointer;color:var(--acc);font-size:14px;min-height:24px}
 <div class="row"><button id="now" type="button">Use device clock</button></div>
 <pre id="out"></pre>
 <div id="hfiles" class="sub"></div>
+<div class="row"><label class="chk"><input type="checkbox" id="shr"> Share Local-only text in this email (I approve, e.g. NDA signed)</label></div>
 <div class="row">
+<button class="pri" id="em" type="button">Email Max (Gmail)</button>
+<button id="em2" type="button">Email Max (mail app)</button>
 <button id="cp" type="button">Copy</button>
+</div>
+<p class="sub">Step 2: press Send in the email. Step 3: come back and mark the items handed off.</p>
+<div class="row">
 <button class="pri" id="mk" type="button">Mark handed off and save CSV</button>
 <button id="rd" type="button">Read aloud</button>
 <button id="wl" type="button">Write log note now</button>
 </div>
-<p class="sub">Paste the block into the Comms Team chat for Max. Marking saves a CSV backup and, on the MacBook, writes the log note to Obsidian.</p>
+<p class="sub">Without sharing approval, Local-only items go by Item ID only. Marking saves a CSV backup.</p>
 <p class="err" id="er2" role="alert"></p>
 </div>
 <div class="card" id="upd">
@@ -214,6 +220,8 @@ summary{cursor:pointer;color:var(--acc);font-size:14px;min-height:24px}
 <div class="grid"><div><label for="dev">Device name</label><input id="dev" maxlength="20" placeholder="e.g. Nord5 or MacBook" autocomplete="off"></div></div>
 <div class="grid"><div><label for="sbase">First session number on this device</label><input id="sbase" type="number" min="1" max="900" inputmode="numeric"></div></div>
 <p class="sub">Give each device its own block of 50 so Item IDs never clash: MacBook 1, Nord5 51, next device 101.</p>
+<div class="grid"><div style="grid-column:1/-1"><label for="mxe">Max's hand-off email</label><input id="mxe" type="email" autocomplete="off" placeholder="Max's address"></div></div>
+<p class="sub">Kept only in this browser, never in the page code, because the page is public.</p>
 <div class="row"><button class="pri" id="devs" type="button">Save device settings</button></div>
 <p class="sub" id="devmsg" role="status">Each device keeps its own log. The name goes into the hand-off block, the conversation and every export, so Max and Min can see where an item came from.</p>
 </section>
@@ -224,7 +232,7 @@ summary{cursor:pointer;color:var(--acc);font-size:14px;min-height:24px}
 <div class="row"><button id="vpick" type="button">Add vault folder</button></div>
 <div class="grid"><div style="grid-column:1/-1"><label for="vconf">Confidential folder names, separated by commas (number prefixes such as 10- are ignored)</label><input id="vconf" autocomplete="off"></div></div>
 <div class="row"><button id="vconfs" type="button">Save folder names</button></div>
-<p class="sub">A folder is also confidential if it holds a note named _CONFIDENTIAL.md. Before showing anything from a confidential folder, JARVIS asks; your approval lasts until the page reloads. Search is read-only and nothing leaves this Mac.</p>
+<p class="sub">A folder is also confidential if it holds a note named _CONFIDENTIAL.md. Results from confidential folders are shown with a RESTRICTED flag naming the vault and folder. You decide what, if anything, is shared. Search is read-only and nothing leaves this Mac.</p>
 <h2 style="margin-top:14px">Daily log folder</h2>
 <p class="sub" id="lgstat"></p>
 <div class="row"><button id="lgpick" type="button">Choose log folder</button><button id="lgforget" type="button">Disconnect log folder</button></div>
@@ -477,7 +485,7 @@ if(!o.length){$('out').textContent='Nothing captured to hand over.';$('hfiles').
 if(!$('en').value){$('out').textContent=o.length+' to hand over. Enter the end time, or use the device clock, to build the block.';$('hfiles').textContent='';return}
 $('out').textContent='JARVIS HANDOFF | Device '+(dev()||'not named')+' | Session '+$('dt').value+', '+$('st').value+'–'+$('en').value+' ('+($('ts').value||'time source not stated')+')\n'+o.map(line).join('\n');
 var fs=[];o.forEach(function(it){it.files.forEach(function(f){fs.push(it.id+': '+fn1(f))})});
-$('hfiles').textContent=fs.length?'Attach these yourself in the chat: '+fs.join('; '):''}
+$('hfiles').textContent=fs.length?'Attach these yourself in the email: '+fs.join('; '):''}
 $('en').onchange=buildHand;
 $('now').onclick=function(){$('en').value=hm(new Date());buildHand()};
 $('cp').onclick=function(){var e=$('er2');e.textContent='';if(!$('en').value||!toHand().length){e.textContent='Build the block first.';return}var t=$('out').textContent;if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(function(){e.textContent='Copied.'},function(){e.textContent='Copy blocked. Select the text and copy it by hand.'})}else{e.textContent='Copy not available here. Select the text and copy it by hand.'}};
@@ -487,7 +495,7 @@ if(!$('en').value){e.textContent='Enter the end time first.';return}
 o.forEach(function(it){setSt(it,'handed')});save();exportCsv();
 log('j','Handed off '+o.length+' item'+(o.length===1?'':'s')+' to Max: '+o.map(function(it){return it.id}).join(', ')+'. Waiting for Min to register them.');
 var nw=freshSess();$('sess').value=nw;$('st').value=hm(new Date());$('en').value='';save();log('j','New items will start Session '+nw+'.');
-buildHand();renderHome();e.textContent='Marked handed off. CSV saved to your downloads.';
+buildHand();renderHome();$('shr').checked=false;e.textContent='Marked handed off. CSV saved to your downloads.';
 if(lgdir)writeLog(o).then(function(m){e.textContent='Marked handed off. CSV saved. '+m},function(x){e.textContent='Marked handed off and CSV saved, but the log note was not written ('+(x.message||x.name)+'). Tap Write log note now.'})};
 $('rd').onclick=function(){var e=$('er2');e.textContent='';var o=toHand();if(!o.length){e.textContent='Nothing to read.';return}
 var lo=o.some(function(it){return it.lo==='Y'});
@@ -590,11 +598,12 @@ if(c==='silent'||c==='start')return 'Mic did not start.'+(f?' The page is open a
 return 'Mic stopped: '+(c||'unknown')+'.'+tip}
 syncMic();
 
-function drawDev(){$('sbase').value=base();var d=dev();$('devh').textContent=d?' · '+d:'';document.title=d?'JARVIS · '+d:'JARVIS';$('dev').value=d;$('devwarn').hidden=!!d}
+function drawDev(){$('mxe').value=ls('jarvis-maxmail')||'';$('sbase').value=base();var d=dev();$('devh').textContent=d?' · '+d:'';document.title=d?'JARVIS · '+d:'JARVIS';$('dev').value=d;$('devwarn').hidden=!!d}
 $('devs').onclick=function(){var v=$('dev').value.trim().replace(/\s+/g,' ');
 if(!/^[A-Za-z0-9 _-]{2,20}$/.test(v)){$('devmsg').textContent='Use 2 to 20 letters, numbers, spaces, - or _.';return}
 var sb=parseInt($('sbase').value,10);if(!(sb>=1&&sb<=900)){$('devmsg').textContent='First session number must be between 1 and 900.';return}
 var ob=base();ls('jarvis-sbase',String(sb));if(sb!==ob){var nw=freshSess();if(+$('sess').value<sb||+$('sess').value>=sb+50||sessClosed(+$('sess').value)){$('sess').value=nw;save()}log('j','Sessions on this device now start at '+sb+'. Current session: '+$('sess').value+'.')}
+var mx=$('mxe').value.trim();if(mx&&!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(mx)){$('devmsg').textContent='That email address does not look right.';return}ls('jarvis-maxmail',mx);
 var old=dev();ls('jarvis-device',v);drawDev();$('devmsg').textContent='Saved. This device is '+v+', sessions from '+sb+'.';if(old!==v)log('j','This device is now named '+v+(old?' (was '+old+')':'')+'.')};
 drawDev();
 /* ---------- Obsidian vaults (read-only search) and log folder (create-only) ---------- */
@@ -634,14 +643,10 @@ await walk(v.h,'');v.idx={notes:notes,marks:marks}}
 function gate(v,path){var cn=confNames(),mk=v.idx.marks;if(mk[''])return '';var seg=path?path.split('/'):[];for(var i=0;i<seg.length;i++){var sub=seg.slice(0,i+1).join('/');if(cn.indexOf(fnorm(seg[i]))>=0||mk[sub])return sub}return null}
 function glab(x){return x.v+' / '+(x.g||'(whole vault)')}
 function snip(t,w){var lo=t.toLowerCase(),i=lo.indexOf(w[0]);if(i<0)return t.slice(0,160);var a=Math.max(0,t.lastIndexOf('\n',i)+1),b=t.indexOf('\n',i);if(b<0)b=t.length;var l=t.slice(a,b).trim();if(l.length>180){var c=Math.max(0,i-a-60);l=(c?'…':'')+l.slice(c,c+180)+'…'}return l}
-function vrender(){var html='',groups={},open=vlast.hits.filter(function(x){return x.g===null||vapp[x.k]});
-vlast.hits.forEach(function(x){if(x.g!==null&&!vapp[x.k]&&!vskip[x.k]){groups[x.k]=groups[x.k]||{l:glab(x),n:0};groups[x.k].n++}});
-Object.keys(groups).forEach(function(k){var g=groups[k];html+='<div class="wait" style="margin-top:8px">'+g.n+' match'+(g.n===1?'':'es')+' in <b>'+esc(g.l)+'</b>, a confidential folder. Show them?<div class="row" style="margin-top:6px"><button type="button" class="pri" data-va="'+esc(k)+'">Allow until reload</button><button type="button" data-vk="'+esc(k)+'">Skip</button></div></div>'});
-html+=open.slice(0,30).map(function(x){var file=(x.p?x.p+'/':'')+x.n;return '<div class="item"><b>'+esc(x.n)+'</b> <span class="chip">'+esc(x.v)+'</span><span class="chip">'+esc(x.p||'/')+'</span>'+(x.g!==null?'<span class="chip f">confidential</span>':'')+'<div class="sub">'+esc(x.s)+'</div><a href="obsidian://open?vault='+encodeURIComponent(x.v)+'&amp;file='+encodeURIComponent(file)+'">Open in Obsidian</a></div>'}).join('');
-if(open.length>30)html+='<p class="sub">Showing 30 of '+open.length+'. Add a word to narrow the search.</p>';
-$('vres').innerHTML=html;
-var as=$('vres').querySelectorAll('button[data-va]');for(var i=0;i<as.length;i++)as[i].onclick=function(){var k=this.getAttribute('data-va'),l=groups[k].l;vapp[k]=1;vstat(function(v){if(v.ap.indexOf(l)<0)v.ap.push(l)});log('j','You approved the confidential folder '+l+' until the page reloads.');vrender()};
-var ks=$('vres').querySelectorAll('button[data-vk]');for(var j=0;j<ks.length;j++)ks[j].onclick=function(){var k=this.getAttribute('data-vk');log('j','You skipped the confidential folder '+groups[k].l+' for this search.');vskip[k]=1;vrender()}}
+function vrender(){var hits=vlast.hits.slice().sort(function(a,b){return (a.g===null)-(b.g===null)});
+var html=hits.slice(0,40).map(function(x){var file=(x.p?x.p+'/':'')+x.n;return '<div class="item"><b>'+esc(x.n)+'</b> <span class="chip">'+esc(x.v)+'</span><span class="chip">'+esc(x.p||'/')+'</span>'+(x.g!==null?'<span class="chip f">RESTRICTED · '+esc(glab(x))+'</span>':'')+'<div class="sub">'+esc(x.s)+'</div><a href="obsidian://open?vault='+encodeURIComponent(x.v)+'&amp;file='+encodeURIComponent(file)+'">Open in Obsidian</a></div>'}).join('');
+if(hits.length>40)html+='<p class="sub">Showing 40 of '+hits.length+'. Add a word to narrow the search.</p>';
+$('vres').innerHTML=html}
 $('vq').addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();$('vs').click()}});
 $('vs').onclick=async function(){var q=$('vq').value.trim(),st=$('vst');if(!q||!vaults.length)return;
 if(/password|passcode|\bpin\b|\b\d{9,}\b/i.test(q)){st.textContent='That looks like a password, PIN or account number. Search not run.';return}
@@ -651,11 +656,11 @@ try{if(!(await perm(v.h,'read'))){miss.push(v.h.name+' (not allowed)');continue}
 total+=v.idx.notes.length;
 v.idx.notes.forEach(function(x){var all=(x.n+'\n'+x.t).toLowerCase();if(w.every(function(k){return all.indexOf(k)>=0})){var g=gate(v,x.p);hits.push({v:v.h.name,p:x.p,n:x.n,s:snip(x.t,w),g:g,k:v.h.name+'::'+g})}})}
 vlast={q:q,hits:hits};
-var shown=hits.filter(function(x){return x.g===null||vapp[x.k]}).length,held=hits.length-shown,gs={};hits.forEach(function(x){if(x.g!==null&&!vapp[x.k])gs[glab(x)]=1});
+var gs={},fl=0;hits.forEach(function(x){if(x.g!==null){fl++;gs[glab(x)]=1}});
 st.textContent=(hits.length?hits.length+' note'+(hits.length===1?'':'s')+' found in '+total+' searched.':'No notes contain all of those words ('+total+' searched).')+(miss.length?' Skipped: '+miss.join(', ')+'.':'');
-vstat(function(v){v.n++});
+vstat(function(v){v.n++;Object.keys(gs).forEach(function(l){if(v.ap.indexOf(l)<0)v.ap.push(l)})});
 log('u','Search vault: '+q,{src:'vault'});
-log('j','Found '+shown+' note'+(shown===1?'':'s')+(held?'. '+held+' more in confidential folder'+(Object.keys(gs).length===1?'':'s')+' '+Object.keys(gs).join(', ')+', waiting for your approval':'')+(miss.length?'. Skipped: '+miss.join(', '):'')+'.');
+log('j','Found '+hits.length+' note'+(hits.length===1?'':'s')+(fl?', '+fl+' flagged RESTRICTED from '+Object.keys(gs).join(', '):'')+(miss.length?'. Skipped: '+miss.join(', '):'')+'.');
 vrender()};
 /* daily log note */
 function mdLine(it){var t=it.lo==='Y'?'[Local-only: text kept in JARVIS on '+(it.dv||dev()||'this device')+']':it.tx.replace(/\s+/g,' ');return '- `'+it.id+'` '+it.ty+' · '+t+' · '+it.cf+(it.fl.length?' · '+it.fl.join('; '):'')}
@@ -672,7 +677,7 @@ var md=['---','type: jarvis-log','device: '+d,'date: '+ymd(n),'time: "'+hm(n)+'"
 '## Closed since last log',clo.length?clo.map(mdLine).join('\n'):'- None','',
 '## Waiting over 24 hours (check with Max)',wt.length?wt.map(mdLine).join('\n'):'- None','',
 '## Still captured, not handed off',cap.length?cap.map(mdLine).join('\n'):'- None','',
-'## Vault activity since last log','- Searches: '+vs.n,'- Confidential folders approved: '+(vs.ap.length?vs.ap.join(', '):'none'),'',
+'## Vault activity since last log','- Searches: '+vs.n,'- Restricted folders in results: '+(vs.ap.length?vs.ap.join(', '):'none'),'',
 '#jarvis-log'].join('\n')+'\n';
 var base=ymd(n)+' '+two(n.getHours())+two(n.getMinutes())+' '+d.replace(/[\\/:*?"<>|]/g,'-'),name=base+'.md',k=2;
 while(true){try{await lgdir.getFileHandle(name);name=base+' ('+k+').md';k++}catch(e){if(e&&e.name==='NotFoundError')break;throw e}}
@@ -680,6 +685,23 @@ var fh=await lgdir.getFileHandle(name,{create:true}),wr=await fh.createWritable(
 ls('jarvis-lastlog',String(n.getTime()));ls('jarvis-vstats',JSON.stringify({n:0,ap:[]}));
 log('j','Log note written to Obsidian: '+lgdir.name+'/'+name+'.');
 return 'Log note written: '+name}
+function emailParts(){var o=toHand(),sh=$('shr').checked,ss={};o.forEach(function(it){ss[sessOf(it).split(' S')[1]]=1});
+var subj='JARVIS HANDOFF | '+(dev()||'device not named')+' | Session '+Object.keys(ss).join(', ')+' | '+$('dt').value+' '+$('en').value;
+var lines=o.map(function(it){var t=(it.lo==='Y'&&!sh)?'[Local-only: text kept in JARVIS]':it.tx;return [it.id,it.ty,t,it.so,it.cf,it.lo,flags(it)].join(' | ')});
+var fs=[];o.forEach(function(it){it.files.forEach(function(f){fs.push(it.id+': '+fn1(f))})});
+var body='JARVIS HANDOFF | Device '+(dev()||'not named')+' | Session '+$('dt').value+', '+$('st').value+'–'+$('en').value+' ('+($('ts').value||'time source not stated')+')\n'+lines.join('\n')+(fs.length?'\n\nFiles attached: '+fs.join('; '):'')+'\n\nPlease keep each J- ID unchanged. If an ID is a duplicate, reply "DUPLICATE J-…".';
+return {o:o,sh:sh,subj:subj,body:body,lo:o.filter(function(it){return it.lo==='Y'})}}
+function emailGo(kind){var e=$('er2');e.textContent='';var to=ls('jarvis-maxmail')||'';
+if(!to){e.textContent="Add Max's hand-off email first (Settings, This device).";return}
+if(!toHand().length){e.textContent='Nothing to hand over.';return}
+if(!$('en').value){e.textContent='Enter the end time first.';return}
+var m=emailParts(),url=kind==='gmail'?'https://mail.google.com/mail/?view=cm&fs=1&to='+encodeURIComponent(to)+'&su='+encodeURIComponent(m.subj)+'&body='+encodeURIComponent(m.body):'mailto:'+encodeURIComponent(to).replace('%40','@')+'?subject='+encodeURIComponent(m.subj)+'&body='+encodeURIComponent(m.body);
+if(url.length>(kind==='gmail'?7500:1900)){e.textContent='This hand-off is too long for an email link. Tap Copy, paste it into a new email to Max, and use the subject: '+m.subj;return}
+if(kind==='gmail')window.open(url,'_blank','noopener');else location.href=url;
+if(m.sh&&m.lo.length)log('j','You approved sharing Local-only text for '+m.lo.map(function(it){return it.id}).join(', ')+' in this email.');
+log('j','Email to Max drafted for '+m.o.length+' item'+(m.o.length===1?'':'s')+(m.lo.length?(m.sh?' (Local-only text included)':' (Local-only text left out)'):'')+'. Press Send, then mark handed off.');
+e.textContent='Email drafted. Press Send in '+(kind==='gmail'?'Gmail':'your mail app')+', then tap Mark handed off.'}
+$('em').onclick=function(){emailGo('gmail')};$('em2').onclick=function(){emailGo('app')};
 $('wl').onclick=function(){var e=$('er2');e.textContent='Writing…';writeLog([]).then(function(m){e.textContent=m},function(x){e.textContent='Log note not written: '+(x.message||x.name)+'.'})};
 drawVault();
 if(VS){kv('get','vaults').then(function(a){if(a&&a.length){vaults=a.map(function(h){return {h:h,idx:null}});drawVault()}else return kv('get','vault').then(function(h){if(h){vaults=[{h:h,idx:null}];saveVaults();drawVault()}})},function(){});
