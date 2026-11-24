@@ -528,8 +528,17 @@ if(local){try{rec.processLocally=true}catch(e){}}
 rec.onresult=function(ev){var s='';for(var i=ev.resultIndex;i<ev.results.length;i++)if(ev.results[i].isFinal)s+=ev.results[i][0].transcript;if(s){var t=$('tx');t.value=(t.value?t.value+' ':'')+s.trim();$('so').value='voice';micMode=local?'on-device':'cloud'}};
 rec.onstart=function(){$('mic').classList.add('on');$('mic').textContent='Stop mic';setOrb('listening')};
 rec.onend=function(){$('mic').classList.remove('on');$('mic').textContent='Mic';setOrb('')};
-rec.onerror=function(ev){$('micmsg').textContent='Mic stopped: '+(ev.error||'unknown')+'.'};
-try{rec.start()}catch(e){}};
+rec.onerror=function(ev){$('micmsg').textContent=micErr(ev.error)};
+try{rec.start();setTimeout(function(){if(!$('mic').classList.contains('on')&&!/Mic stopped|blocked|not start/.test($('micmsg').textContent))$('micmsg').textContent=micErr('silent')},2500)}catch(e){$('micmsg').textContent=micErr('start')}};
+function micErr(c){var f=location.protocol==='file:'||location.protocol==='content:'||!window.isSecureContext;
+var tip=' Use the microphone key on your keyboard instead (Android keyboard mic, or press the Globe or Fn key twice on the Mac).';
+if(c==='not-allowed'||c==='service-not-allowed')return 'Mic blocked.'+(f?' The page is open as a local file, and Chrome often blocks speech for local files. A hosted https link fixes this.':' Allow the microphone for this page in Chrome settings.')+tip;
+if(c==='network')return 'Mic stopped: the speech service could not be reached. Check the internet connection.'+tip;
+if(c==='audio-capture')return 'Mic stopped: no microphone was found, or another app is using it.'+tip;
+if(c==='no-speech')return 'Mic stopped: no speech heard. Tap Mic and speak straight away.';
+if(c==='aborted')return 'Mic stopped.';
+if(c==='silent'||c==='start')return 'Mic did not start.'+(f?' The page is open as a local file, which Chrome may block for speech.':'')+tip;
+return 'Mic stopped: '+(c||'unknown')+'.'+tip}
 syncMic();
 
 route();
