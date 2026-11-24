@@ -89,7 +89,7 @@ summary{cursor:pointer;color:var(--acc);font-size:14px;min-height:24px}
 <body>
 <div class="wrap">
 <header class="top">
-<h1 class="brand">JARVIS</h1>
+<h1 class="brand">JARVIS<span id="devh"></span></h1>
 <div class="ctl">
 <button id="gear" type="button">Settings</button>
 <button id="theme" type="button" aria-label="Switch between light and dark mode">Light mode</button>
@@ -116,6 +116,7 @@ summary{cursor:pointer;color:var(--acc);font-size:14px;min-height:24px}
 <p class="sub" id="micmsg" role="status"></p>
 <div id="pend" class="sub"></div>
 <p class="err" id="er" role="alert"></p>
+<p class="wait" id="devwarn" hidden>Name this device first: Settings, This device (for example Nord5 or MacBook).</p>
 
 <details id="more">
 <summary>More fields</summary>
@@ -201,6 +202,12 @@ summary{cursor:pointer;color:var(--acc);font-size:14px;min-height:24px}
 <main id="s_set" hidden>
 <div class="mh" style="margin-top:6px"><button id="b3" type="button">&lsaquo; Home</button><h2 style="margin:0">Settings</h2><span></span></div>
 <section class="card">
+<h2>This device</h2>
+<div class="grid"><div><label for="dev">Device name</label><input id="dev" maxlength="20" placeholder="e.g. Nord5 or MacBook" autocomplete="off"></div></div>
+<div class="row"><button class="pri" id="devs" type="button">Save device name</button></div>
+<p class="sub" id="devmsg" role="status">Each device keeps its own log. The name goes into the hand-off block, the conversation and every export, so Max and Min can see where an item came from.</p>
+</section>
+<section class="card">
 <h2>Voice read-back (UK)</h2>
 <div class="grid"><div><label for="vc">Voice on this device</label><select id="vc"></select></div></div>
 <div class="row">
@@ -265,6 +272,8 @@ function ymd(d){return d.getFullYear()+'-'+two(d.getMonth()+1)+'-'+two(d.getDate
 function hm(d){return two(d.getHours())+':'+two(d.getMinutes())}
 var storeOk=true;
 function ls(k,v){try{if(v===undefined)return localStorage.getItem(k);localStorage.setItem(k,v);return v}catch(e){if(v!==undefined)storeOk=false;return null}}
+function dev(){return ls('jarvis-device')||''}
+function devTag(){return dev()?dev().replace(/[^A-Za-z0-9_-]+/g,'-')+'-':''}
 function dl(text,type,name){var b=new Blob([text],{type:type+';charset=utf-8'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;document.body.appendChild(a);a.click();document.body.removeChild(a)}
 
 var ST={captured:'Captured',handed:'Handed off',registered:'Registered',closed:'Closed'};
@@ -347,7 +356,7 @@ function count(s){return items.filter(function(it){return it.st===s}).length}
 function toHand(){return items.filter(function(it){return it.st==='captured'})}
 
 /* ---------- conversation ---------- */
-function log(who,tx,o){o=o||{};conv.push({t:new Date().toISOString(),w:who,tx:tx,id:o.id||'',src:o.src||'',k:sessKey()});saveConv();renderConv(true)}
+function log(who,tx,o){o=o||{};conv.push({t:new Date().toISOString(),w:who,tx:tx,id:o.id||'',src:o.src||'',k:sessKey(),dv:dev()});saveConv();renderConv(true)}
 function convKeys(){var seen={},a=[];conv.forEach(function(c){if(!seen[c.k]){seen[c.k]=1;a.push(c.k)}});var k=sessKey();if(!seen[k])a.push(k);return a}
 function fillConvSess(keep){var cur=keep||$('cs').value||sessKey(),ks=convKeys();$('cs').innerHTML=ks.map(function(k){return '<option value="'+esc(k)+'">Session '+esc(k)+'</option>'}).join('');$('cs').value=ks.indexOf(cur)>=0?cur:sessKey()}
 function chipSt(it){return '<span class="chip s-'+it.st+'">'+esc(it.id)+' · '+ST[it.st]+(waiting(it)?' · waiting':'')+'</span>'}
@@ -362,11 +371,11 @@ $('cs').onchange=function(){renderConv(false)};
 function convText(keys){
 var out=[];keys.forEach(function(k){var l=conv.filter(function(c){return c.k===k});if(!l.length)return;
 var a=new Date(l[0].t),b=new Date(l[l.length-1].t);
-out.push('JARVIS CONVERSATION | Session '+k+' | '+ymd(a)+' '+hm(a)+'–'+hm(b)+' (device clock)');
+out.push('JARVIS CONVERSATION | Device '+(l[0].dv||dev()||'not named')+' | Session '+k+' | '+ymd(a)+' '+hm(a)+'–'+hm(b)+' (device clock)');
 l.forEach(function(c){var d=new Date(c.t),it=c.id?byId(c.id):null;out.push('['+ymd(d)+' '+hm(d)+'] '+(c.w==='j'?'JARVIS':'You')+(c.src?' ('+c.src+')':'')+': '+c.tx+(it?' ['+it.id+' · '+ST[it.st]+']':''))});out.push('')});
 return out.join('\n')}
-$('ctx').onclick=function(){var k=$('cs').value;if(!conv.some(function(c){return c.k===k}))return;dl(convText([k]),'text/plain','jarvis-conversation-'+k.replace(' ','-')+'-'+ymd(new Date())+'.txt')};
-$('ctx2').onclick=function(){if(!conv.length){$('bmsg').textContent='No conversation to save yet.';return}dl(convText(convKeys()),'text/plain','jarvis-conversations-'+ymd(new Date())+'.txt');$('bmsg').textContent='Conversation saved to your downloads.'};
+$('ctx').onclick=function(){var k=$('cs').value;if(!conv.some(function(c){return c.k===k}))return;dl(convText([k]),'text/plain','jarvis-conversation-'+devTag()+k.replace(' ','-')+'-'+ymd(new Date())+'.txt')};
+$('ctx2').onclick=function(){if(!conv.length){$('bmsg').textContent='No conversation to save yet.';return}dl(convText(convKeys()),'text/plain','jarvis-conversations-'+devTag()+ymd(new Date())+'.txt');$('bmsg').textContent='Conversation saved to your downloads.'};
 $('cclr').onclick=function(){if(this.getAttribute('data-arm')!=='1'){this.setAttribute('data-arm','1');this.textContent='Tap again to clear (save it first)';return}this.removeAttribute('data-arm');this.textContent='Clear conversation history';conv=[];saveConv();renderConv(true);$('bmsg').textContent='Conversation history cleared. Items are kept.'};
 
 /* ---------- home ---------- */
@@ -398,7 +407,7 @@ if($('ns').checked)fl.push('NOT SURE');
 if(d){var dd=new Date(d+'T00:00:00'),wk=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dd.getDay()];fl.push('DUE '+d+' ('+wk+')');if($('wd').value&&$('wd').value!==wk){fl.push('NOT SURE: you said '+$('wd').value+', but '+d+' is a '+wk);$('cf').value='Low'}}
 var m=$('mo').value.trim(),c=$('cu').value.trim().toUpperCase();
 if(m){fl.push('MONEY '+m+' '+(c||'?'));if(!c){fl.push('NOT SURE: currency');$('cf').value='Low'}}
-var it=norm({id:nextId(),ty:$('ty').value,tx:t,so:$('so').value,cf:$('cf').value,lo:$('lo').checked?'Y':'N',fl:fl,due:d,files:pending.slice(),at:new Date().toISOString()});
+var it=norm({id:nextId(),ty:$('ty').value,tx:t,so:$('so').value,cf:$('cf').value,lo:$('lo').checked?'Y':'N',fl:fl,due:d,files:pending.slice(),dv:dev(),at:new Date().toISOString()});
 setSt(it,'captured');items.push(it);save();
 var src=it.so+(it.so==='voice'&&micMode?', '+micMode:'')+(it.lo==='Y'?', Local-only':'');
 log('u',t,{src:src});
@@ -418,7 +427,7 @@ var st=$('fs').value,se=$('fe').value,q=$('fq').value.trim().toLowerCase();
 var list=items.filter(function(it){if(st==='waiting'){if(!waiting(it))return false}else if(st!=='all'&&it.st!==st)return false;if(se&&sessOf(it)!==se)return false;if(q&&(it.id+' '+it.tx+' '+it.fl.join(' ')).toLowerCase().indexOf(q)<0)return false;return true}).reverse();
 if(!list.length){$('logl').innerHTML='<span class="sub">'+(items.length?'No items match this filter.':'No items yet.')+'</span>';return}
 $('logl').innerHTML=list.map(function(it){var i=items.indexOf(it),when=it.stt[it.st]?new Date(it.stt[it.st]):null;
-return '<div class="item'+(it.st==='registered'||it.st==='closed'?' dim':'')+'"><span class="id">'+esc(it.id)+'</span> '+chipSt(it)+'<span class="chip">'+it.ty+'</span><span class="chip">'+it.so+'</span><span class="chip">Confidence '+it.cf+'</span><span class="chip">Local-only '+it.lo+'</span><div>'+esc(it.tx)+'</div>'+it.fl.map(function(f){return '<span class="chip f">'+esc(f)+'</span>'}).join('')+(it.files.length?'<span class="chip">Files: '+esc(fnames(it))+'</span>':'')+(when?'<div class="sub">'+ST[it.st]+' '+ymd(when)+' '+hm(when)+'</div>':'')+
+return '<div class="item'+(it.st==='registered'||it.st==='closed'?' dim':'')+'"><span class="id">'+esc(it.id)+'</span> '+chipSt(it)+'<span class="chip">'+it.ty+'</span><span class="chip">'+it.so+'</span><span class="chip">Confidence '+it.cf+'</span><span class="chip">Local-only '+it.lo+'</span>'+(it.dv?'<span class="chip">'+esc(it.dv)+'</span>':'')+'<div>'+esc(it.tx)+'</div>'+it.fl.map(function(f){return '<span class="chip f">'+esc(f)+'</span>'}).join('')+(it.files.length?'<span class="chip">Files: '+esc(fnames(it))+'</span>':'')+(when?'<div class="sub">'+ST[it.st]+' '+ymd(when)+' '+hm(when)+'</div>':'')+
 '<div class="row" style="margin-top:6px"><select data-s="'+i+'" aria-label="Status of '+esc(it.id)+'">'+Object.keys(ST).map(function(s){return '<option value="'+s+'"'+(s===it.st?' selected':'')+'>'+ST[s]+'</option>'}).join('')+'</select><button type="button" data-r="'+i+'">Remove</button></div></div>'}).join('');
 var ss=$('logl').querySelectorAll('select[data-s]');for(var k=0;k<ss.length;k++)ss[k].onchange=function(){var x=items[+this.getAttribute('data-s')];setSt(x,this.value);save();log('j',x.id+' marked '+ST[x.st].toLowerCase()+' by you.',{id:x.id});renderLog()};
 var rs=$('logl').querySelectorAll('button[data-r]');for(var j=0;j<rs.length;j++)rs[j].onclick=function(){if(this.getAttribute('data-arm')!=='1'){this.setAttribute('data-arm','1');this.textContent='Tap again to remove';return}var x=items.splice(+this.getAttribute('data-r'),1)[0];save();log('j',x.id+' removed by you.');renderLog()}}
@@ -429,7 +438,7 @@ function buildHand(){
 var o=toHand();$('er2').textContent='';
 if(!o.length){$('out').textContent='Nothing captured to hand over.';$('hfiles').textContent='';return}
 if(!$('en').value){$('out').textContent=o.length+' to hand over. Enter the end time, or use the device clock, to build the block.';$('hfiles').textContent='';return}
-$('out').textContent='JARVIS HANDOFF | Session '+$('dt').value+', '+$('st').value+'–'+$('en').value+' ('+($('ts').value||'time source not stated')+')\n'+o.map(line).join('\n');
+$('out').textContent='JARVIS HANDOFF | Device '+(dev()||'not named')+' | Session '+$('dt').value+', '+$('st').value+'–'+$('en').value+' ('+($('ts').value||'time source not stated')+')\n'+o.map(line).join('\n');
 var fs=[];o.forEach(function(it){it.files.forEach(function(f){fs.push(it.id+': '+fn1(f))})});
 $('hfiles').textContent=fs.length?'Attach these yourself in the chat: '+fs.join('; '):''}
 $('en').onchange=buildHand;
@@ -456,12 +465,12 @@ $('pr').textContent=msg;log('j','Update from Max or Min. '+msg.trim());renderHom
 function q(v){v=String(v);return '"'+v.replace(/"/g,'""')+'"'}
 function exportCsv(){
 var safe=function(t){return /^[=+\-@]/.test(t)?"'"+t:t};
-var r=['id,type,text,source,confidence,local_only,flags,files,handed_off,due,status,status_time'].concat(items.map(function(it){return [it.id,it.ty,safe(it.tx),it.so,it.cf,it.lo,it.fl.join('; '),fnames(it),it.st==='captured'?'N':'Y',it.due||'',it.st,it.stt[it.st]||''].map(q).join(',')}));
-dl(r.join('\n'),'text/csv','jarvis-items-'+ymd(new Date())+'.csv')}
+var r=['id,type,text,source,confidence,local_only,flags,files,handed_off,due,status,status_time,device'].concat(items.map(function(it){return [it.id,it.ty,safe(it.tx),it.so,it.cf,it.lo,it.fl.join('; '),fnames(it),it.st==='captured'?'N':'Y',it.due||'',it.st,it.stt[it.st]||'',it.dv||''].map(q).join(',')}));
+dl(r.join('\n'),'text/csv','jarvis-items-'+devTag()+ymd(new Date())+'.csv')}
 $('csv').onclick=function(){if(!items.length){$('bmsg').textContent='Nothing to export yet.';return}exportCsv();$('bmsg').textContent='CSV saved to your downloads.'};
 $('md').onclick=function(){if(!items.length){$('bmsg').textContent='Nothing to export yet.';return}
-var n=new Date(),md=['# JARVIS items','Exported '+ymd(n)+' '+hm(n)+' (device clock)',''].concat(items.map(function(it){return '- ['+(it.st==='registered'||it.st==='closed'?'x':' ')+'] **'+it.id+'** '+it.ty+' — '+it.tx.replace(/\n/g,' ')+' · Status: '+ST[it.st]+(it.fl.length?' · '+it.fl.join('; '):'')+(it.lo==='Y'?' · Local-only':'')}));
-dl(md.join('\n')+'\n','text/markdown','jarvis-items-'+ymd(n)+'.md');$('bmsg').textContent='Markdown saved. Copy it into your Obsidian vault by hand.'};
+var n=new Date(),md=['# JARVIS items'+(dev()?' — '+dev():''),'Exported '+ymd(n)+' '+hm(n)+' (device clock)',''].concat(items.map(function(it){return '- ['+(it.st==='registered'||it.st==='closed'?'x':' ')+'] **'+it.id+'** '+it.ty+' — '+it.tx.replace(/\n/g,' ')+' · Status: '+ST[it.st]+(it.fl.length?' · '+it.fl.join('; '):'')+(it.lo==='Y'?' · Local-only':'')}));
+dl(md.join('\n')+'\n','text/markdown','jarvis-items-'+devTag()+ymd(n)+'.md');$('bmsg').textContent='Markdown saved. Copy it into your Obsidian vault by hand.'};
 function parseCSV(s){var rows=[],row=[],f='',inq=false,i,c;for(i=0;i<s.length;i++){c=s.charAt(i);if(inq){if(c==='"'){if(s.charAt(i+1)==='"'){f+='"';i++}else inq=false}else f+=c}else{if(c==='"')inq=true;else if(c===','){row.push(f);f=''}else if(c==='\n'||c==='\r'){if(c==='\r'&&s.charAt(i+1)==='\n')i++;row.push(f);rows.push(row);row=[];f=''}else f+=c}}if(f!==''||row.length){row.push(f);rows.push(row)}return rows}
 $('imp').onchange=function(){var f=this.files[0],self=this;if(!f)return;var r=new FileReader();r.onload=function(){
 try{var rows=parseCSV(String(r.result).replace(/^﻿/,'')),h=rows[0].map(function(x){return x.trim().toLowerCase()});
@@ -473,7 +482,7 @@ var tx=col(c,'text');if(/^'[=+\-@]/.test(tx))tx=tx.slice(1);
 var fl=col(c,'flags').split('; ').filter(function(x){return x&&x!=='-'});
 var due=col(c,'due');if(!due){fl.forEach(function(x){var m=/^DUE (\d{4}-\d{2}-\d{2})/.exec(x);if(m)due=m[1]})}
 var ft=col(c,'files'),st=col(c,'status');if(!ST[st])st=col(c,'handed_off')==='Y'?'handed':'captured';
-var it={id:id,ty:col(c,'type')||'WORK',tx:tx,so:col(c,'source')||'typed',cf:col(c,'confidence')||'Medium',lo:col(c,'local_only')||'N',fl:fl,due:due,files:ft?[{name:ft,size:-1}]:[],st:st,stt:{},at:''};
+var it={id:id,ty:col(c,'type')||'WORK',tx:tx,so:col(c,'source')||'typed',cf:col(c,'confidence')||'Medium',lo:col(c,'local_only')||'N',fl:fl,due:due,files:ft?[{name:ft,size:-1}]:[],st:st,stt:{},dv:col(c,'device'),at:''};
 if(col(c,'status_time'))it.stt[st]=col(c,'status_time');
 items.push(norm(it));add++});
 save();renderHome();$('bmsg').textContent='Imported '+add+' item'+(add===1?'':'s')+', skipped '+skip+' already here.'}
@@ -541,6 +550,11 @@ if(c==='silent'||c==='start')return 'Mic did not start.'+(f?' The page is open a
 return 'Mic stopped: '+(c||'unknown')+'.'+tip}
 syncMic();
 
+function drawDev(){var d=dev();$('devh').textContent=d?' · '+d:'';document.title=d?'JARVIS · '+d:'JARVIS';$('dev').value=d;$('devwarn').hidden=!!d}
+$('devs').onclick=function(){var v=$('dev').value.trim().replace(/\s+/g,' ');
+if(!/^[A-Za-z0-9 _-]{2,20}$/.test(v)){$('devmsg').textContent='Use 2 to 20 letters, numbers, spaces, - or _.';return}
+var old=dev();ls('jarvis-device',v);drawDev();$('devmsg').textContent='Saved. This device is '+v+'.';if(old!==v)log('j','This device is now named '+v+(old?' (was '+old+')':'')+'.')};
+drawDev();
 route();
 })();
 </script>
