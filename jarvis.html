@@ -196,10 +196,10 @@ summary{cursor:pointer;color:var(--acc);font-size:14px;min-height:24px}
 </div>
 <p class="sub">Step 2: press Send in the email. Step 3: come back and mark the items handed off.</p>
 <div class="row">
-<button class="pri" id="mk" type="button">Mark handed off and save CSV</button>
+<button class="pri" id="mk" type="button">Mark handed off</button>
 <button id="rd" type="button">Read aloud</button>
 </div>
-<p class="sub">Without sharing approval, Local-only items go by Item ID only. Marking saves a CSV backup.</p>
+<p class="sub">Without sharing approval, Local-only items go by Item ID only. Gmail Sent and the Ops Log are the record of each hand-off.</p>
 <p class="err" id="er2" role="alert"></p>
 </div>
 <div class="card" id="upd">
@@ -254,7 +254,7 @@ summary{cursor:pointer;color:var(--acc);font-size:14px;min-height:24px}
 </section>
 <section class="card">
 <h2>Backup and archive</h2>
-<p class="sub">Items and the conversation are kept in this browser, which can clear them. Save a CSV regularly. Import skips IDs already here.</p>
+<p class="sub">Items and the conversation are kept in this browser. Conversation lines are deleted after 7 days. Export a CSV only to move items between devices or to recover them, and save it to PUKKA-RESTRICTED. Import skips IDs already here.</p>
 <div class="row">
 <button id="csv" type="button">Export items (CSV)</button>
 <button id="md" type="button">Export items for Obsidian (Markdown)</button>
@@ -324,6 +324,7 @@ if(raw){try{if(o&&o.dt===$('dt').value){same=true;if(o.sess)$('sess').value=o.se
 if(!same)$('sess').value=String(+ls('jarvis-sbase')||1);
 try{var sn=JSON.parse(ls('jarvis-seen')||'[]');if(Array.isArray(sn))seen=sn}catch(e){}
 try{var c=JSON.parse(ls('jarvis-conv')||'[]');if(Array.isArray(c))conv=c}catch(e){}
+var cut=Date.now()-7*DAY,n0=conv.length;conv=conv.filter(function(x){return Date.parse(x.t)>cut});if(conv.length!==n0)ls('jarvis-conv',JSON.stringify(conv));
 })();
 drawStore();
 
@@ -487,10 +488,10 @@ $('cp').onclick=function(){var e=$('er2');e.textContent='';if(!$('en').value||!t
 $('mk').onclick=function(){var e=$('er2');e.textContent='';var o=toHand();
 if(!o.length){e.textContent='Nothing to hand over.';return}
 if(!$('en').value){e.textContent='Enter the end time first.';return}
-o.forEach(function(it){setSt(it,'handed')});save();exportCsv();
+o.forEach(function(it){setSt(it,'handed')});save();
 log('j','Handed off '+o.length+' item'+(o.length===1?'':'s')+' to Max: '+o.map(function(it){return it.id}).join(', ')+'. Waiting for Min to register them.');
 var nw=freshSess();$('sess').value=nw;$('st').value=hm(new Date());$('en').value='';save();log('j','New items will start Session '+nw+'.');
-buildHand();renderHome();$('shr').checked=false;e.textContent='Marked handed off. CSV saved to your downloads.';};
+buildHand();renderHome();$('shr').checked=false;e.textContent='Marked handed off.';};
 $('rd').onclick=function(){var e=$('er2');e.textContent='';var o=toHand();if(!o.length){e.textContent='Nothing to read.';return}
 var lo=o.some(function(it){return it.lo==='Y'});
 if(!say(o.map(function(it){return 'Item '+it.id.slice(-2)+'. '+it.ty.toLowerCase()+'. '+it.tx+'. Confidence '+it.cf.toLowerCase()+'.'}).join(' '),lo))e.textContent=synth?'Not read: the block has Local-only items and no on-device voice was found.':'This browser cannot speak.'};
@@ -651,12 +652,12 @@ st.textContent=(hits.length?hits.length+' note'+(hits.length===1?'':'s')+' found
 log('u','Search vault: '+q,{src:'vault'});
 log('j','Found '+hits.length+' note'+(hits.length===1?'':'s')+(fl?', '+fl+' flagged RESTRICTED from '+Object.keys(gs).join(', '):'')+(miss.length?'. Skipped: '+miss.join(', '):'')+'.');
 vrender()};
-function emailParts(){var o=toHand(),sh=$('shr').checked,ss={};o.forEach(function(it){ss[sessOf(it).split(' S')[1]]=1});
+function emailParts(){var o=toHand(),sh=$('shr').checked,ss={},lo=o.filter(function(it){return it.lo==='Y'});o.forEach(function(it){ss[sessOf(it).split(' S')[1]]=1});
 var subj='JARVIS HANDOFF | '+(dev()||'device not named')+' | Session '+Object.keys(ss).join(', ')+' | '+$('dt').value+' '+$('en').value;
 var lines=o.map(function(it){var t=(it.lo==='Y'&&!sh)?'[Local-only: text kept in JARVIS]':it.tx;return [it.id,it.ty,t,it.so,it.cf,it.lo,flags(it)].join(' | ')});
 var fs=[];o.forEach(function(it){it.files.forEach(function(f){fs.push(it.id+': '+fn1(f))})});
-var body='JARVIS HANDOFF | Device '+(dev()||'not named')+' | Session '+$('dt').value+', '+$('st').value+'–'+$('en').value+' ('+($('ts').value||'time source not stated')+')\n'+lines.join('\n')+(fs.length?'\n\nFiles attached: '+fs.join('; '):'')+'\n\nPlease keep each J- ID unchanged. If an ID is a duplicate, reply "DUPLICATE J-…".';
-return {o:o,sh:sh,subj:subj,body:body,lo:o.filter(function(it){return it.lo==='Y'})}}
+var body='JARVIS HANDOFF | Device '+(dev()||'not named')+' | Session '+$('dt').value+', '+$('st').value+'–'+$('en').value+' ('+($('ts').value||'time source not stated')+')\n'+lines.join('\n')+(fs.length?'\n\nFiles attached: '+fs.join('; '):'')+(sh&&lo.length?"\n\nLocal-only text for "+lo.map(function(it){return it.id}).join(', ')+" shared with Benson's approval.":'')+'\n\nPlease keep each J- ID unchanged. If an ID is a duplicate, reply "DUPLICATE J-…".';
+return {o:o,sh:sh,subj:subj,body:body,lo:lo}}
 function emailGo(kind){var e=$('er2');e.textContent='';var to=ls('jarvis-maxmail')||'';
 if(!to){e.textContent="Add Max's hand-off email first (Settings, This device).";return}
 if(!toHand().length){e.textContent='Nothing to hand over.';return}
