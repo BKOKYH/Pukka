@@ -451,7 +451,7 @@ if($('ns').checked)fl.push('NOT SURE');
 if(d){var dd=new Date(d+'T00:00:00'),wk=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dd.getDay()];fl.push('DUE '+d+' ('+wk+')');if($('wd').value&&$('wd').value!==wk){fl.push('NOT SURE: you said '+$('wd').value+', but '+d+' is a '+wk);$('cf').value='Low'}}
 var m=$('mo').value.trim(),c=$('cu').value.trim().toUpperCase();
 if(m){fl.push('MONEY '+m+' '+(c||'?'));if(!c){fl.push('NOT SURE: currency');$('cf').value='Low'}}
-var cur=+$('sess').value||base();if(sessClosed(cur)){var nw=freshSess();$('sess').value=nw;save();log('j','Session '+cur+' was already handed off, so this item starts Session '+nw+'.')}
+rollDay();var cur=+$('sess').value||base();if(sessClosed(cur)){var nw=freshSess();$('sess').value=nw;save();log('j','Session '+cur+' was already handed off, so this item starts Session '+nw+'.')}
 var it=norm({id:nextId(),ty:$('ty').value,tx:t,so:$('so').value,cf:$('cf').value,lo:$('lo').checked?'Y':'N',fl:fl,due:d,files:pending.slice(),dv:dev(),at:new Date().toISOString()});
 setSt(it,'captured');items.push(it);save();
 var src=it.so+(it.so==='voice'&&micMode?', '+micMode:'')+(it.lo==='Y'?', Local-only':'');
@@ -462,7 +462,10 @@ log('j',reply,{id:it.id});
 if($('rb').checked){if(!say(reply,it.lo==='Y')&&synth)log('j','Read-back skipped: this is a Local-only item and no on-device voice was found.')}
 $('tx').value='';['du','mo','cu'].forEach(function(i){$(i).value=''});$('wd').value='';$('ns').checked=false;$('lo').checked=false;$('cf').value='Medium';$('so').value='typed';micMode='';pending=[];drawPend();syncMic();
 renderHome();$('tx').focus()};
-['sess','dt','st'].forEach(function(i){$(i).onchange=function(){save();renderConv(true)}});
+['sess','dt','st'].forEach(function(i){$(i).onchange=function(){if(i==='dt')dtManual=($('dt').value!==ymd(new Date()));save();renderConv(true)}});
+var dtManual=false;
+function rollDay(){var td=ymd(new Date()),old=$('dt').value;if(dtManual||old===td)return false;$('dt').value=td;$('sess').value=base();$('st').value=hm(new Date());save();log('j','New day: session date moved from '+old+' to '+td+'. Session '+$('sess').value+'.');return true}
+document.addEventListener('visibilitychange',function(){if(!document.hidden&&rollDay()&&curScreen()==='home')renderHome()});
 
 /* ---------- captured log ---------- */
 function fillSess(){var cur=$('fe').value,seen={},o='<option value="">All sessions</option>';items.forEach(function(it){var s=sessOf(it);if(!seen[s]){seen[s]=1;o+='<option value="'+esc(s)+'">'+esc(s)+'</option>'}});$('fe').innerHTML=o;if(seen[cur])$('fe').value=cur}
