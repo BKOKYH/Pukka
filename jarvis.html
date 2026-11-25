@@ -145,6 +145,7 @@ summary{cursor:pointer;color:var(--acc);font-size:14px;min-height:24px}
 <button class="kpi" type="button" id="k_registered"><b id="n_registered">0</b><span>Registered</span></button>
 <button class="kpi" type="button" id="k_closed"><b id="n_closed">0</b><span>Closed</span></button>
 </div>
+<div class="wait" id="pendln" hidden></div>
 <p class="wait" id="waitln" hidden></p>
 <div class="row"><button id="gpaste" type="button">Update from Max or Min</button></div>
 </section>
@@ -194,9 +195,11 @@ summary{cursor:pointer;color:var(--acc);font-size:14px;min-height:24px}
 <button id="em2" type="button">Email Max (mail app)</button>
 <button id="cp" type="button">Copy</button>
 </div>
-<p class="sub">Step 2: press Send in the email. Step 3: come back and mark the items handed off.</p>
+<p class="sub">Step 2: press Send in the email. Step 3: come back and tap "I pressed Send".</p>
+<div class="wait" id="pendh" hidden></div>
 <div class="row">
-<button class="pri" id="mk" type="button">Mark handed off</button>
+<button class="pri" id="mk" type="button">I pressed Send: mark handed off</button>
+<button id="pcx" type="button">Cancel this email</button>
 <button id="rd" type="button">Read aloud</button>
 </div>
 <p class="sub">Without sharing approval, Local-only items go by Item ID only. Gmail Sent and the Ops Log are the record of each hand-off.</p>
@@ -219,8 +222,9 @@ summary{cursor:pointer;color:var(--acc);font-size:14px;min-height:24px}
 <div class="grid"><div><label for="dev">Device name</label><input id="dev" maxlength="20" placeholder="e.g. Nord5 or MacBook" autocomplete="off"></div></div>
 <div class="grid"><div><label for="sbase">First session number on this device</label><input id="sbase" type="number" min="1" max="900" inputmode="numeric"></div></div>
 <p class="sub">Give each device its own block of 50 so Item IDs never clash: MacBook 1, Nord5 51, next device 101.</p>
+<div class="grid"><div style="grid-column:1/-1"><label for="sfrom">Send from (your Gmail or Google Workspace account)</label><input id="sfrom" type="email" autocomplete="off" placeholder="the account you send from"></div></div>
 <div class="grid"><div style="grid-column:1/-1"><label for="mxe">Max's hand-off email</label><input id="mxe" type="email" autocomplete="off" placeholder="Max's address"></div></div>
-<p class="sub">Kept only in this browser, never in the page code, because the page is public.</p>
+<p class="sub">Both addresses are kept only in this browser, never in the page code, because the page is public. Email Max (Gmail) opens in the Send from account. With the mail app, choose the sender yourself.</p>
 <div class="row"><button class="pri" id="devs" type="button">Save device settings</button></div>
 <p class="sub" id="devmsg" role="status">Each device keeps its own log. The name goes into the hand-off block, the conversation and every export, so Max and Min can see where an item came from.</p>
 </section>
@@ -419,7 +423,7 @@ $('ctx2').onclick=function(){if(!conv.length){$('bmsg').textContent='No conversa
 $('cclr').onclick=function(){if(this.getAttribute('data-arm')!=='1'){this.setAttribute('data-arm','1');this.textContent='Tap again to clear (save it first)';return}this.removeAttribute('data-arm');this.textContent='Clear conversation history';conv=[];saveConv();renderConv(true);$('bmsg').textContent='Conversation history cleared. Items are kept.'};
 
 /* ---------- home ---------- */
-function renderHome(){
+function renderHome(){drawPend2();
 $('lcount').innerHTML=items.length+' &rsaquo;';$('hcount').textContent=toHand().length+' to hand over';
 Object.keys(ST).forEach(function(s){$('n_'+s).textContent=count(s)});
 var w=items.filter(waiting);$('waitln').hidden=!w.length;
@@ -485,11 +489,19 @@ $('hfiles').textContent=fs.length?'Attach these yourself in the email: '+fs.join
 $('en').onchange=buildHand;
 $('now').onclick=function(){$('en').value=hm(new Date());buildHand()};
 $('cp').onclick=function(){var e=$('er2');e.textContent='';if(!$('en').value||!toHand().length){e.textContent='Build the block first.';return}var t=$('out').textContent;if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(function(){e.textContent='Copied.'},function(){e.textContent='Copy blocked. Select the text and copy it by hand.'})}else{e.textContent='Copy not available here. Select the text and copy it by hand.'}};
-$('mk').onclick=function(){var e=$('er2');e.textContent='';var o=toHand();
-if(!o.length){e.textContent='Nothing to hand over.';return}
-if(!$('en').value){e.textContent='Enter the end time first.';return}
-o.forEach(function(it){setSt(it,'handed')});save();
-log('j','Handed off '+o.length+' item'+(o.length===1?'':'s')+' to Max: '+o.map(function(it){return it.id}).join(', ')+'. Waiting for Min to register them.');
+function pend(){try{return JSON.parse(ls('jarvis-pending')||'null')}catch(e){return null}}
+function setPend(v){ls('jarvis-pending',v?JSON.stringify(v):'');drawPend2()}
+function drawPend2(){var p=pend(),t=p?'Email to Max drafted at '+hm(new Date(p.at))+' for '+p.ids.length+' item'+(p.ids.length===1?'':'s')+' ('+p.ids.join(', ')+'), from '+(p.from||'your mail app')+'. Not confirmed sent yet.':'';
+$('pendh').hidden=!p;$('pendh').textContent=t+(p?' Check it is in Sent, then tap "I pressed Send".':'');
+$('pendln').hidden=!p;$('pendln').innerHTML=p?esc(t)+' <a href="#hand">Confirm on Hand over</a>':'';
+$('mk').disabled=!p;$('pcx').hidden=!p}
+$('pcx').onclick=function(){var p=pend();if(!p)return;setPend(null);log('j','Email draft cancelled for '+p.ids.join(', ')+'. Items stay captured.');$('er2').textContent='Cancelled. Items stay captured.'};
+$('mk').onclick=function(){var e=$('er2');e.textContent='';var p=pend();
+if(!p){e.textContent='Use Email Max first, press Send, then confirm here.';return}
+var o=p.ids.map(byId).filter(function(it){return it&&it.st==='captured'});
+if(!o.length){setPend(null);e.textContent='Those items are no longer waiting to be handed off.';return}
+o.forEach(function(it){setSt(it,'handed')});save();setPend(null);
+log('j','You confirmed the email was sent'+(p.from?' from '+p.from:'')+'. Handed off '+o.length+' item'+(o.length===1?'':'s')+' to Max: '+o.map(function(it){return it.id}).join(', ')+'. Waiting for Min to register them.');
 var nw=freshSess();$('sess').value=nw;$('st').value=hm(new Date());$('en').value='';save();log('j','New items will start Session '+nw+'.');
 buildHand();renderHome();$('shr').checked=false;e.textContent='Marked handed off.';};
 $('rd').onclick=function(){var e=$('er2');e.textContent='';var o=toHand();if(!o.length){e.textContent='Nothing to read.';return}
@@ -593,12 +605,12 @@ if(c==='silent'||c==='start')return 'Mic did not start.'+(f?' The page is open a
 return 'Mic stopped: '+(c||'unknown')+'.'+tip}
 syncMic();
 
-function drawDev(){$('mxe').value=ls('jarvis-maxmail')||'';$('sbase').value=base();var d=dev();$('devh').textContent=d?' · '+d:'';document.title=d?'JARVIS · '+d:'JARVIS';$('dev').value=d;$('devwarn').hidden=!!d}
+function drawDev(){$('mxe').value=ls('jarvis-maxmail')||'';$('sfrom').value=ls('jarvis-from')||'';$('sbase').value=base();var d=dev();$('devh').textContent=d?' · '+d:'';document.title=d?'JARVIS · '+d:'JARVIS';$('dev').value=d;$('devwarn').hidden=!!d}
 $('devs').onclick=function(){var v=$('dev').value.trim().replace(/\s+/g,' ');
 if(!/^[A-Za-z0-9 _-]{2,20}$/.test(v)){$('devmsg').textContent='Use 2 to 20 letters, numbers, spaces, - or _.';return}
 var sb=parseInt($('sbase').value,10);if(!(sb>=1&&sb<=900)){$('devmsg').textContent='First session number must be between 1 and 900.';return}
 var ob=base();ls('jarvis-sbase',String(sb));if(sb!==ob){var nw=freshSess();if(+$('sess').value<sb||+$('sess').value>=sb+50||sessClosed(+$('sess').value)){$('sess').value=nw;save()}log('j','Sessions on this device now start at '+sb+'. Current session: '+$('sess').value+'.')}
-var mx=$('mxe').value.trim();if(mx&&!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(mx)){$('devmsg').textContent='That email address does not look right.';return}ls('jarvis-maxmail',mx);
+var mx=$('mxe').value.trim();if(mx&&!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(mx)){$('devmsg').textContent='That email address does not look right.';return}var sf=$('sfrom').value.trim();if(sf&&!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(sf)){$('devmsg').textContent='The Send from address does not look right.';return}ls('jarvis-from',sf);ls('jarvis-maxmail',mx);
 var old=dev();ls('jarvis-device',v);drawDev();$('devmsg').textContent='Saved. This device is '+v+', sessions from '+sb+'.';if(old!==v)log('j','This device is now named '+v+(old?' (was '+old+')':'')+'.')};
 drawDev();
 /* ---------- Obsidian vaults (read-only search) and log folder (create-only) ---------- */
@@ -662,12 +674,15 @@ function emailGo(kind){var e=$('er2');e.textContent='';var to=ls('jarvis-maxmail
 if(!to){e.textContent="Add Max's hand-off email first (Settings, This device).";return}
 if(!toHand().length){e.textContent='Nothing to hand over.';return}
 if(!$('en').value){e.textContent='Enter the end time first.';return}
-var m=emailParts(),url=kind==='gmail'?'https://mail.google.com/mail/?view=cm&fs=1&to='+encodeURIComponent(to)+'&su='+encodeURIComponent(m.subj)+'&body='+encodeURIComponent(m.body):'mailto:'+encodeURIComponent(to).replace('%40','@')+'?subject='+encodeURIComponent(m.subj)+'&body='+encodeURIComponent(m.body);
+var from=ls('jarvis-from')||'';if(kind==='gmail'&&!from){e.textContent='Add your Send from account first (Settings, This device).';return}
+var m=emailParts(),url=kind==='gmail'?'https://mail.google.com/mail/?authuser='+encodeURIComponent(from)+'&view=cm&fs=1&to='+encodeURIComponent(to)+'&su='+encodeURIComponent(m.subj)+'&body='+encodeURIComponent(m.body):'mailto:'+encodeURIComponent(to).replace('%40','@')+'?subject='+encodeURIComponent(m.subj)+'&body='+encodeURIComponent(m.body);
 if(url.length>(kind==='gmail'?7500:1900)){e.textContent='This hand-off is too long for an email link. Tap Copy, paste it into a new email to Max, and use the subject: '+m.subj;return}
+setPend({ids:m.o.map(function(it){return it.id}),at:new Date().toISOString(),from:kind==='gmail'?from:''});
 if(kind==='gmail')window.open(url,'_blank','noopener');else location.href=url;
 if(m.sh&&m.lo.length)log('j','You approved sharing Local-only text for '+m.lo.map(function(it){return it.id}).join(', ')+' in this email.');
-log('j','Email to Max drafted for '+m.o.length+' item'+(m.o.length===1?'':'s')+(m.lo.length?(m.sh?' (Local-only text included)':' (Local-only text left out)'):'')+'. Press Send, then mark handed off.');
-e.textContent='Email drafted. Press Send in '+(kind==='gmail'?'Gmail':'your mail app')+', then tap Mark handed off.'}
+log('j','Email to Max drafted for '+m.o.length+' item'+(m.o.length===1?'':'s')+(m.lo.length?(m.sh?' (Local-only text included)':' (Local-only text left out)'):'')+(kind==='gmail'?' from '+from:'')+'. Not confirmed sent yet.');
+e.textContent='Email drafted. Press Send in '+(kind==='gmail'?'Gmail ('+from+')':'your mail app')+', then tap "I pressed Send".'}
+drawPend2();
 $('em').onclick=function(){emailGo('gmail')};$('em2').onclick=function(){emailGo('app')};
 try{localStorage.removeItem('jarvis-vstats');localStorage.removeItem('jarvis-lastlog')}catch(e){}
 drawVault();
