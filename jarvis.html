@@ -632,7 +632,7 @@ var rs=$('vlist').querySelectorAll('button[data-vr]');for(var i=0;i<rs.length;i+
 $('vpick').disabled=!VS||vaults.length>=3;$('vcard').hidden=!VS;
 $('vname').textContent=vaults.length?vaults.map(function(v){return v.h.name}).join(' + '):'not connected';$('vs').disabled=!vaults.length;
 
-if(VS&&!vaults.length)$('vst').textContent='Add your vaults in Settings, Obsidian vaults.'}
+var hint='Add your vaults in Settings, Obsidian vaults.';if(VS&&!vaults.length)$('vst').textContent=hint;else if($('vst').textContent===hint)$('vst').textContent=''}
 $('vpick').onclick=function(){if(!VS)return;window.showDirectoryPicker({id:'vault',mode:'read'}).then(async function(h){
 for(var i=0;i<vaults.length;i++)if(await vaults[i].h.isSameEntry(h)){$('vamsg').textContent=h.name+' is already connected.';return}
 vaults.push({h:h,idx:null});saveVaults();vlast=null;$('vres').innerHTML='';drawVault();
